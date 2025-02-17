@@ -374,6 +374,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Expanded(
+                  child: Center(
+                    child: SizedBox(
+                      width: 200,
+                      height: 200,
+                      child: Joystick(
+                        mode: JoystickMode.all,
+                        listener: (details) {
+                          if (_mqttClient.connectionStatus?.state ==
+                              MqttConnectionState.connected) {
+                            final builder = MqttClientPayloadBuilder();
+                            builder.addString(
+                                '{"turn": ${details.x.toStringAsFixed(2)}, "speed": ${details.y.toStringAsFixed(2)}}');
+                            _mqttClient.publishMessage(
+                              'picar/control_request',
+                              MqttQos.atLeastOnce,
+                              builder.payload!,
+                            );
+                          }
+                        },
+                        base: Container(
+                          width: 150,
+                          height: 150,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[300],
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'DRIVE',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        stick: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
                   flex: 2,
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),

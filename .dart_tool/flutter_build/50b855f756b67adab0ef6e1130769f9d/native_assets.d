@@ -1,0 +1,1 @@
+ C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\.dart_tool\\flutter_build\\50b855f756b67adab0ef6e1130769f9d\\native_assets.yaml: 

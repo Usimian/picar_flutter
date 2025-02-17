@@ -155,7 +155,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </ProjectReference>
-    <ProjectReference Include="C:\Users\marcw\CascadeProjects\picar_flutter\build\windows\x64\ALL_BUILD.vcxproj">
+    <ProjectReference Include="C:\Users\marcw\CascadeProjects\picar_flutter\build\windows\x64\runner\ALL_BUILD.vcxproj">
       <Project>{795692ED-5ACE-39FA-923E-3502E2D6D717}</Project>
       <Name>ALL_BUILD</Name>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>

@@ -230,13 +230,13 @@
       "languageVersion": "3.3"
     },
     {
-      "name": "two_bot_flutter",
+      "name": "picarlutter",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.6"
     }
   ],
-  "generated": "2025-02-17T14:30:46.996588Z",
+  "generated": "2025-02-17T14:41:17.948299Z",
   "generator": "pub",
   "generatorVersion": "3.6.1",
   "flutterRoot": "file:///C:/Users/marcw/flutter",

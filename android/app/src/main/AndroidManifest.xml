@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="two_bot_flutter"
+        android:label="picar_flutter"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

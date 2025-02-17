@@ -140,9 +140,9 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
       <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
       <CopyToOutputDirectory>Never</CopyToOutputDirectory>
     </ProjectReference>
-    <ProjectReference Include="C:\Users\marcw\CascadeProjects\picar_flutter\build\windows\x64\runner\two_bot_flutter.vcxproj">
-      <Project>{79D6F3C7-F9F7-3E21-AAAA-E335E5A6B5E0}</Project>
-      <Name>two_bot_flutter</Name>
+    <ProjectReference Include="C:\Users\marcw\CascadeProjects\picar_flutter\build\windows\x64\runner\picar_flutter.vcxproj">
+      <Project>{81CD375D-0A27-36A3-9D88-D940C1454327}</Project>
+      <Name>picar_flutter</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -1,6 +1,6 @@
-# two_bot_flutter
+# picar_flutter
 
-A new Flutter project.
+Marc's reimagining of the picar-x project
 
 ## Getting Started
 

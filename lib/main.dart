@@ -9,9 +9,9 @@ import 'models/robot_state.dart';
 import 'widgets/position_control.dart';
 
 // MQTT Topics
-const String kMqttTopicStatusRequest = 'two_bot/status_request';
-const String kMqttTopicStatusResponse = 'two_bot/status_response';
-const String kMqttTopicControlRequest = 'two_bot/control_request';
+const String kMqttTopicStatusRequest = 'picar/status_request';
+const String kMqttTopicStatusResponse = 'picar/status_response';
+const String kMqttTopicControlRequest = 'picar/control_request';
 
 void main() {
   // Set up logging
@@ -125,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _setupMqttClient() async {
-    _mqttClient = MqttServerClient(_mqttServerIp, 'two_bot_client_${DateTime.now().millisecondsSinceEpoch}');
+    _mqttClient = MqttServerClient(_mqttServerIp, 'picar_client_${DateTime.now().millisecondsSinceEpoch}');
     _mqttClient.port = 1883;
     _mqttClient.keepAlivePeriod = 20; // Reduced keep-alive period for faster detection
     _mqttClient.logging(on: true);
@@ -155,7 +155,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Set connection message with more detailed options
     final connMessage = MqttConnectMessage()
-        .withClientIdentifier('two_bot_client_${DateTime.now().millisecondsSinceEpoch}')
+        .withClientIdentifier('picar_client_${DateTime.now().millisecondsSinceEpoch}')
         .startClean()
         .withWillQos(MqttQos.atLeastOnce)
         .withWillRetain()

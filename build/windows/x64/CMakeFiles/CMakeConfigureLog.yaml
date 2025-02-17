@@ -24,7 +24,7 @@ events:
       The output was:
       0
       MSBuild version 17.12.12+1cce77968 for .NET Framework
-      Build started 2/17/2025 9:38:48 AM.
+      Build started 2/17/2025 1:49:19 PM.
       
       Project "C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\3.29.5-msvc4\\CompilerIdCXX\\CompilerIdCXX.vcxproj" on node 1 (default targets).
       PrepareForBuild:
@@ -53,7 +53,7 @@ events:
           0 Warning(s)
           0 Error(s)
       
-      Time Elapsed 00:00:00.57
+      Time Elapsed 00:00:00.39
       
       
       Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CompilerIdCXX.exe"
@@ -72,8 +72,8 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-747tfe"
-      binary: "C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-747tfe"
+      source: "C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-15zlxn"
+      binary: "C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-15zlxn"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "/DWIN32 /D_WINDOWS /W3 /GR /EHsc"
       CMAKE_CXX_FLAGS_DEBUG: "/MDd /Zi /Ob0 /Od /RTC1"
@@ -83,40 +83,40 @@ events:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: 'C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-747tfe'
+        Change Dir: 'C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-15zlxn'
         
-        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_24267.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
+        Run Build Command(s): "C:/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/amd64/MSBuild.exe" cmTC_06d9c.vcxproj /p:Configuration=Debug /p:Platform=x64 /p:VisualStudioVersion=17.0 /v:n
         MSBuild version 17.12.12+1cce77968 for .NET Framework
-        Build started 2/17/2025 9:38:50 AM.
+        Build started 2/17/2025 1:49:20 PM.
         
-        Project "C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-747tfe\\cmTC_24267.vcxproj" on node 1 (default targets).
+        Project "C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-15zlxn\\cmTC_06d9c.vcxproj" on node 1 (default targets).
         PrepareForBuild:
-          Creating directory "cmTC_24267.dir\\Debug\\".
+          Creating directory "cmTC_06d9c.dir\\Debug\\".
           Structured output is enabled. The formatting of compiler diagnostics will reflect the error hierarchy. See https://aka.ms/cpp/structured-output for more details.
-          Creating directory "C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-747tfe\\Debug\\".
-          Creating directory "cmTC_24267.dir\\Debug\\cmTC_24267.tlog\\".
+          Creating directory "C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-15zlxn\\Debug\\".
+          Creating directory "cmTC_06d9c.dir\\Debug\\cmTC_06d9c.tlog\\".
         InitializeBuildStatus:
-          Creating "cmTC_24267.dir\\Debug\\cmTC_24267.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
-          Touching "cmTC_24267.dir\\Debug\\cmTC_24267.tlog\\unsuccessfulbuild".
+          Creating "cmTC_06d9c.dir\\Debug\\cmTC_06d9c.tlog\\unsuccessfulbuild" because "AlwaysCreate" was specified.
+          Touching "cmTC_06d9c.dir\\Debug\\cmTC_06d9c.tlog\\unsuccessfulbuild".
         ClCompile:
-          C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /Fo"cmTC_24267.dir\\Debug\\\\" /Fd"cmTC_24267.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\share\\cmake-3.29\\Modules\\CMakeCXXCompilerABI.cpp"
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\CL.exe /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /Fo"cmTC_06d9c.dir\\Debug\\\\" /Fd"cmTC_06d9c.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\share\\cmake-3.29\\Modules\\CMakeCXXCompilerABI.cpp"
           Microsoft (R) C/C++ Optimizing Compiler Version 19.42.34435 for x64
           Copyright (C) Microsoft Corporation.  All rights reserved.
-          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /Fo"cmTC_24267.dir\\Debug\\\\" /Fd"cmTC_24267.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\share\\cmake-3.29\\Modules\\CMakeCXXCompilerABI.cpp"
+          cl /c /Zi /W3 /WX- /diagnostics:column /Od /Ob0 /D _MBCS /D WIN32 /D _WINDOWS /D "CMAKE_INTDIR=\\"Debug\\"" /Gm- /EHsc /RTC1 /MDd /GS /fp:precise /Zc:wchar_t /Zc:forScope /Zc:inline /GR /Fo"cmTC_06d9c.dir\\Debug\\\\" /Fd"cmTC_06d9c.dir\\Debug\\vc143.pdb" /external:W3 /Gd /TP /errorReport:queue "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\Common7\\IDE\\CommonExtensions\\Microsoft\\CMake\\CMake\\share\\cmake-3.29\\Modules\\CMakeCXXCompilerABI.cpp"
           CMakeCXXCompilerABI.cpp
         Link:
-          C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-747tfe\\Debug\\cmTC_24267.exe" /INCREMENTAL /ILK:"cmTC_24267.dir\\Debug\\cmTC_24267.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-747tfe/Debug/cmTC_24267.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-747tfe/Debug/cmTC_24267.lib" /MACHINE:X64  /machine:x64 cmTC_24267.dir\\Debug\\CMakeCXXCompilerABI.obj
-          cmTC_24267.vcxproj -> C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-747tfe\\Debug\\cmTC_24267.exe
+          C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Tools\\MSVC\\14.42.34433\\bin\\HostX64\\x64\\link.exe /ERRORREPORT:QUEUE /OUT:"C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-15zlxn\\Debug\\cmTC_06d9c.exe" /INCREMENTAL /ILK:"cmTC_06d9c.dir\\Debug\\cmTC_06d9c.ilk" /NOLOGO kernel32.lib user32.lib gdi32.lib winspool.lib shell32.lib ole32.lib oleaut32.lib uuid.lib comdlg32.lib advapi32.lib /MANIFEST /MANIFESTUAC:"level='asInvoker' uiAccess='false'" /manifest:embed /DEBUG /PDB:"C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-15zlxn/Debug/cmTC_06d9c.pdb" /SUBSYSTEM:CONSOLE /TLBID:1 /DYNAMICBASE /NXCOMPAT /IMPLIB:"C:/Users/marcw/CascadeProjects/picar_flutter/build/windows/x64/CMakeFiles/CMakeScratch/TryCompile-15zlxn/Debug/cmTC_06d9c.lib" /MACHINE:X64  /machine:x64 cmTC_06d9c.dir\\Debug\\CMakeCXXCompilerABI.obj
+          cmTC_06d9c.vcxproj -> C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-15zlxn\\Debug\\cmTC_06d9c.exe
         FinalizeBuildStatus:
-          Deleting file "cmTC_24267.dir\\Debug\\cmTC_24267.tlog\\unsuccessfulbuild".
-          Touching "cmTC_24267.dir\\Debug\\cmTC_24267.tlog\\cmTC_24267.lastbuildstate".
-        Done Building Project "C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-747tfe\\cmTC_24267.vcxproj" (default targets).
+          Deleting file "cmTC_06d9c.dir\\Debug\\cmTC_06d9c.tlog\\unsuccessfulbuild".
+          Touching "cmTC_06d9c.dir\\Debug\\cmTC_06d9c.tlog\\cmTC_06d9c.lastbuildstate".
+        Done Building Project "C:\\Users\\marcw\\CascadeProjects\\picar_flutter\\build\\windows\\x64\\CMakeFiles\\CMakeScratch\\TryCompile-15zlxn\\cmTC_06d9c.vcxproj" (default targets).
         
         Build succeeded.
             0 Warning(s)
             0 Error(s)
         
-        Time Elapsed 00:00:00.37
+        Time Elapsed 00:00:00.36
         
       exitCode: 0
   -

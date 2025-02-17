@@ -4,6 +4,7 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:logging/logging.dart';
 import 'package:flutter_joystick/flutter_joystick.dart';
+import 'package:flutter_mjpeg/flutter_mjpeg.dart';
 import 'dart:async';
 import 'dart:convert'; // Import the dart:convert library
 import 'models/robot_state.dart';
@@ -246,6 +247,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _statusTimeoutTimer?.cancel();
         
         try {
+          _logger.info('Received status response: $payload');
           final Map<String, dynamic> jsonResponse = jsonDecode(payload);
           final double batteryVoltage = jsonResponse['Vb']?.toDouble() ?? 0.0;
           final bool isRunning = batteryVoltage > 0;
@@ -352,52 +354,91 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: Column(
         children: [
           Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Consumer<RobotState>(
+              builder: (context, robotState, child) {
+                final videoUrl = robotState.videoUrl;
+                return Text(
+                  'Video URL: ${videoUrl ?? 'Not available'}',
+                  style: const TextStyle(fontSize: 14),
+                );
+              },
+            ),
+          ),
+          Padding(
             padding: const EdgeInsets.all(16.0),
             child: PositionControl(mqttClient: _mqttClient),
           ),
           Expanded(
-            child: Center(
-              child: SizedBox(
-                width: 200,
-                height: 200,
-                child: Joystick(
-                  mode: JoystickMode.all,
-                  listener: (details) {
-                    if (_mqttClient.connectionStatus?.state == MqttConnectionState.connected) {
-                      // details.x and details.y are already normalized to -1.0 to 1.0
-                      final controlMessage = {
-                        'tilt': details.y*90,  // Invert Y axis so up is positive
-                        'pan': details.x*90
-                      };
-                      
-                      // Publish control message
-                      final builder = MqttClientPayloadBuilder();
-                      builder.addString(json.encode(controlMessage));
-                      _mqttClient.publishMessage(
-                        kMqttTopicControlRequest,
-                        MqttQos.atLeastOnce,
-                        builder.payload!
-                      );
-                    }
-                  },
-                  base: Container(
-                    width: 150,
-                    height: 150,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.grey[300],
-                    ),
-                  ),
-                  stick: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.grey[600],
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Consumer<RobotState>(
+                      builder: (context, robotState, child) {
+                        final videoUrl = robotState.videoUrl;
+                        if (videoUrl == null) {
+                          return const Center(
+                            child: Text('Waiting for video URL...'),
+                          );
+                        }
+                        return Mjpeg(
+                          isLive: true,
+                          stream: videoUrl,
+                        );
+                      },
                     ),
                   ),
                 ),
-              ),
+                Expanded(
+                  child: Center(
+                    child: SizedBox(
+                      width: 200,
+                      height: 200,
+                      child: Joystick(
+                        mode: JoystickMode.all,
+                        listener: (details) {
+                          if (_mqttClient.connectionStatus?.state == MqttConnectionState.connected) {
+                            // details.x and details.y are already normalized to -1.0 to 1.0
+                            final controlMessage = {
+                              'tilt': details.y*90,  // Invert Y axis so up is positive
+                              'pan': details.x*90
+                            };
+                            
+                            // Publish control message
+                            final builder = MqttClientPayloadBuilder();
+                            builder.addString(json.encode(controlMessage));
+                            _mqttClient.publishMessage(
+                              kMqttTopicControlRequest,
+                              MqttQos.atLeastOnce,
+                              builder.payload!
+                            );
+                          }
+                        },
+                        base: Container(
+                          width: 150,
+                          height: 150,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[300],
+                          ),
+                        ),
+                        stick: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

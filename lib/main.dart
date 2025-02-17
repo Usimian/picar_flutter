@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:logging/logging.dart';
+import 'package:flutter_joystick/flutter_joystick.dart';
 import 'dart:async';
 import 'dart:convert'; // Import the dart:convert library
 import 'models/robot_state.dart';
@@ -275,7 +276,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TwoBot Dashboard'),
+        title: const Text('PiCar Dashboard'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           Padding(
@@ -310,23 +311,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Text('I2C'),
                 const SizedBox(width: 8),
                 
-                // IMU Status
+                // Camera Status
                 Icon(
-                  Icons.arrow_circle_down,
-                  color: !_isRobotRunning 
-                      ? const Color.fromARGB(255, 255, 0, 0)
-                      : context.watch<RobotState>().imuStatus 
-                          ? const Color.fromARGB(255, 0, 0, 255)
-                          : const Color.fromARGB(255, 0, 255, 8),
-                  size: 24,
-                ),
-                const SizedBox(width: 4),
-                const Text('IMU'),
-                const SizedBox(width: 8),
-                
-                // ADC Status
-                Icon(
-                  Icons.analytics,
+                  Icons.camera_alt,
                   color: !_isRobotRunning 
                       ? const Color.fromARGB(255, 255, 0, 0)
                       : context.watch<RobotState>().adcStatus 
@@ -335,22 +322,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   size: 24,
                 ),
                 const SizedBox(width: 4),
-                const Text('ADC'),
+                const Text('Camera'),
                 const SizedBox(width: 8),
-                
-                // OLED Status
-                Icon(
-                  Icons.display_settings,
-                  color: !_isRobotRunning 
-                      ? const Color.fromARGB(255, 255, 0, 0)
-                      : context.watch<RobotState>().oledStatus 
-                          ? const Color.fromARGB(255, 0, 0, 255)
-                          : const Color.fromARGB(255, 0, 255, 8),
-                  size: 24,
-                ),
-                const SizedBox(width: 4),
-                const Text('OLED'),
-                const SizedBox(width: 16),
                 
                 // Connection Status
                 Icon(
@@ -381,6 +354,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: PositionControl(mqttClient: _mqttClient),
+          ),
+          Expanded(
+            child: Center(
+              child: SizedBox(
+                width: 200,
+                height: 200,
+                child: Joystick(
+                  mode: JoystickMode.all,
+                  listener: (details) {
+                    if (_mqttClient.connectionStatus?.state == MqttConnectionState.connected) {
+                      // details.x and details.y are already normalized to -1.0 to 1.0
+                      final controlMessage = {
+                        'tilt': details.y*90,  // Invert Y axis so up is positive
+                        'pan': details.x*90
+                      };
+                      
+                      // Publish control message
+                      final builder = MqttClientPayloadBuilder();
+                      builder.addString(json.encode(controlMessage));
+                      _mqttClient.publishMessage(
+                        kMqttTopicControlRequest,
+                        MqttQos.atLeastOnce,
+                        builder.payload!
+                      );
+                    }
+                  },
+                  base: Container(
+                    width: 150,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.grey[300],
+                    ),
+                  ),
+                  stick: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.grey[600],
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),

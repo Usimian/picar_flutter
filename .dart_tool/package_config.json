@@ -74,6 +74,12 @@
       "languageVersion": "3.3"
     },
     {
+      "name": "flutter_joystick",
+      "rootUri": "file:///C:/Users/marcw/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_joystick-0.0.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.1"
+    },
+    {
       "name": "flutter_lints",
       "rootUri": "file:///C:/Users/marcw/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_lints-5.0.0",
       "packageUri": "lib/",
@@ -230,13 +236,13 @@
       "languageVersion": "3.3"
     },
     {
-      "name": "picarlutter",
+      "name": "picar_flutter",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.6"
     }
   ],
-  "generated": "2025-02-17T14:41:17.948299Z",
+  "generated": "2025-02-17T17:20:54.144639Z",
   "generator": "pub",
   "generatorVersion": "3.6.1",
   "flutterRoot": "file:///C:/Users/marcw/flutter",

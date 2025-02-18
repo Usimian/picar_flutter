@@ -434,9 +434,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Text('Waiting for video URL...'),
                           );
                         }
-                        return Mjpeg(
-                          isLive: true,
-                          stream: videoUrl,
+                        return Container(
+                          width: 320,  
+                          height: 240, 
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Mjpeg(
+                              isLive: true,
+                              stream: videoUrl,
+                              error: (context, error, stack) {
+                                return const Center(
+                                  child: Text('Error loading video stream'),
+                                );
+                              },
+                            ),
+                          ),
                         );
                       },
                     ),

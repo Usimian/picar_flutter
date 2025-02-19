@@ -80,6 +80,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _statusTimeoutTimer;
   double _currentSpeed = 0.0;  // Add speed tracking
   double _currentTurn = 0.0;   // Add turn tracking
+  double _currentPan = 0.0;    // Add pan tracking
+  double _currentTilt = 0.0;   // Add tilt tracking
 
   @override
   void initState() {
@@ -287,13 +289,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(8.0),
             child: Row(
               children: [
+                // Battery Status
+                Icon(
+                  Icons.battery_full,
+                  color: context.watch<RobotState>().getBatteryColor(),
+                  size: 24,
+                ),
+                const SizedBox(width: 4),
+                Consumer<RobotState>(
+                  builder: (context, robotState, child) {
+                    return Text('${robotState.vb.toStringAsFixed(2)}V');
+                  },
+                ),
+                const SizedBox(width: 16),
+
                 // GPIO Status
                 Icon(
                   Icons.car_repair,
                   color: !_isRobotRunning 
                       ? const Color.fromARGB(255, 255, 0, 0)  // Red when not running
                       : context.watch<RobotState>().gpioStatus 
-                          ? const Color.fromARGB(255, 0, 0, 255)  // Yellow when running and true
+                          ? const Color.fromARGB(255, 0, 0, 255)  // Blue when running and true
                           : const Color.fromARGB(255, 0, 255, 8),  // Green when running and false
                   size: 24,
                 ),
@@ -315,9 +331,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Text('I2C'),
                 const SizedBox(width: 8),
                 
-                // Camera Status
+                // ADC Status
                 Icon(
-                  Icons.camera_alt,
+                  Icons.memory,
                   color: !_isRobotRunning 
                       ? const Color.fromARGB(255, 255, 0, 0)
                       : context.watch<RobotState>().adcStatus 
@@ -326,9 +342,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   size: 24,
                 ),
                 const SizedBox(width: 4),
-                const Text('Camera'),
+                const Text('ADC'),
                 const SizedBox(width: 8),
                 
+                // Camera Status
+                Icon(
+                  Icons.camera_alt,
+                  color: !_isRobotRunning 
+                      ? const Color.fromARGB(255, 255, 0, 0)
+                      : context.watch<RobotState>().cameraStatus 
+                          ? const Color.fromARGB(255, 0, 0, 255)  // Blue when using test pattern
+                          : const Color.fromARGB(255, 0, 255, 8),  // Green when using real camera
+                  size: 24,
+                ),
+                const SizedBox(width: 4),
+                const Text('Camera'),
+                const SizedBox(width: 8),
+
                 // Connection Status
                 Icon(
                   Icons.connect_without_contact,
@@ -388,50 +418,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         SizedBox(
                           width: 200,
                           height: 200,
-                          child: Joystick(
-                            mode: JoystickMode.all,
-                            listener: (details) {
-                              setState(() {
-                                _currentSpeed = -details.y;  // Invert Y so forward is positive
-                                _currentTurn = details.x;
-                              });
-                              if (_mqttClient.connectionStatus?.state ==
-                                  MqttConnectionState.connected) {
-                                final builder = MqttClientPayloadBuilder();
-                                builder.addString(
-                                    '{"turn": ${details.x.toStringAsFixed(2)}, "speed": ${(-details.y).toStringAsFixed(2)}}');
-                                _mqttClient.publishMessage(
-                                  'picar/control_request',
-                                  MqttQos.atLeastOnce,
-                                  builder.payload!,
-                                );
-                              }
-                            },
-                            base: Container(
-                              width: 150,
-                              height: 150,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.grey[300],
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'DRIVE',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                          child: Consumer<RobotState>(
+                            builder: (context, robotState, child) {
+                              return Joystick(
+                                mode: JoystickMode.all,
+                                listener: (details) {
+                                  // Calculate desired speed (negative Y for forward)
+                                  double desiredSpeed = -details.y;
+                                  
+                                  // If distance is less than 10cm and trying to move forward, force speed to 0
+                                  if (robotState.distance < 30 && desiredSpeed > 0) {
+                                    desiredSpeed = 0;
+                                  }
+
+                                  setState(() {
+                                    _currentSpeed = desiredSpeed;
+                                    _currentTurn = details.x;
+                                  });
+
+                                  if (_mqttClient.connectionStatus?.state == MqttConnectionState.connected) {
+                                    final builder = MqttClientPayloadBuilder();
+                                    builder.addString(
+                                        '{"turn": ${details.x.toStringAsFixed(2)}, "speed": ${desiredSpeed.toStringAsFixed(2)}}');
+                                    _mqttClient.publishMessage(
+                                      'picar/control_request',
+                                      MqttQos.atLeastOnce,
+                                      builder.payload!,
+                                    );
+                                  }
+                                },
+                                base: Container(
+                                  width: 150,
+                                  height: 150,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: robotState.distance < 10 
+                                        ? Colors.red[100]  // Light red background when too close
+                                        : Colors.grey[300],
+                                  ),
+                                  child: Center(
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text(
+                                          'DRIVE',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        if (robotState.distance < 10)
+                                          const Text(
+                                            'TOO CLOSE!',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.red,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                            ),
-                            stick: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Colors.grey[600],
-                              ),
-                            ),
+                                stick: Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ],
@@ -470,46 +528,61 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 Expanded(
                   child: Center(
-                    child: SizedBox(
-                      width: 200,
-                      height: 200,
-                      child: Joystick(
-                        mode: JoystickMode.all,
-                        listener: (details) {
-                          if (_mqttClient.connectionStatus?.state == MqttConnectionState.connected) {
-                            // details.x and details.y are already normalized to -1.0 to 1.0
-                            final controlMessage = {
-                              'tilt': details.y*90,  // Invert Y axis so up is positive
-                              'pan': details.x*90
-                            };
-                            
-                            // Publish control message
-                            final builder = MqttClientPayloadBuilder();
-                            builder.addString(json.encode(controlMessage));
-                            _mqttClient.publishMessage(
-                              kMqttTopicControlRequest,
-                              MqttQos.atLeastOnce,
-                              builder.payload!
-                            );
-                          }
-                        },
-                        base: Container(
-                          width: 150,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.grey[300],
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Pan: ${(_currentPan * 90).toStringAsFixed(2)}°\nTilt: ${(_currentTilt * 90).toStringAsFixed(2)}°',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: 200,
+                          height: 200,
+                          child: Joystick(
+                            mode: JoystickMode.all,
+                            listener: (details) {
+                              setState(() {
+                                _currentPan = details.x;
+                                _currentTilt = details.y;
+                              });
+                              if (_mqttClient.connectionStatus?.state == MqttConnectionState.connected) {
+                                // details.x and details.y are already normalized to -1.0 to 1.0
+                                final controlMessage = {
+                                  'tilt': details.y*90,  // Invert Y axis so up is positive
+                                  'pan': details.x*90
+                                };
+                                
+                                // Publish control message
+                                final builder = MqttClientPayloadBuilder();
+                                builder.addString(json.encode(controlMessage));
+                                _mqttClient.publishMessage(
+                                  kMqttTopicControlRequest,
+                                  MqttQos.atLeastOnce,
+                                  builder.payload!
+                                );
+                              }
+                            },
+                            base: Container(
+                              width: 150,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.grey[300],
+                              ),
+                            ),
+                            stick: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.grey[600],
+                              ),
+                            ),
                           ),
                         ),
-                        stick: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ),

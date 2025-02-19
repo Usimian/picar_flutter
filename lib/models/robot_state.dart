@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 class RobotState extends ChangeNotifier {
+  static const String videoUrl = "http://192.168.1.167:9000/mjpg";
   double pos = 0.0;
   double vb = 0.0;
   double targetPosition = 0.0;
-  String? videoUrl;
 
   // Mock status flags
   bool gpioStatus = false;
@@ -14,7 +14,6 @@ class RobotState extends ChangeNotifier {
   void updateFromJson(Map<String, dynamic> json) {
     pos = json['Pos']?.toDouble() ?? 0.0;
     vb = json['Vb']?.toDouble() ?? 0.0;
-    videoUrl = json['video_url'] as String?;
 
     // Update mock status flags if present
     if (json['mock_status'] != null) {

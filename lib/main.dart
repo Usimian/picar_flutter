@@ -78,6 +78,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _connectionCheckTimer;
   Timer? _statusCheckTimer;
   Timer? _statusTimeoutTimer;
+  double _currentSpeed = 0.0;  // Add speed tracking
+  double _currentTurn = 0.0;   // Add turn tracking
 
   @override
   void initState() {
@@ -357,9 +359,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(8.0),
             child: Consumer<RobotState>(
               builder: (context, robotState, child) {
-                final videoUrl = robotState.videoUrl;
                 return Text(
-                  'Video URL: ${videoUrl ?? 'Not available'}',
+                  'Video URL: ${RobotState.videoUrl}',
                   style: const TextStyle(fontSize: 14),
                 );
               },
@@ -375,50 +376,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Expanded(
                   child: Center(
-                    child: SizedBox(
-                      width: 200,
-                      height: 200,
-                      child: Joystick(
-                        mode: JoystickMode.all,
-                        listener: (details) {
-                          if (_mqttClient.connectionStatus?.state ==
-                              MqttConnectionState.connected) {
-                            final builder = MqttClientPayloadBuilder();
-                            builder.addString(
-                                '{"turn": ${details.x.toStringAsFixed(2)}, "speed": ${details.y.toStringAsFixed(2)}}');
-                            _mqttClient.publishMessage(
-                              'picar/control_request',
-                              MqttQos.atLeastOnce,
-                              builder.payload!,
-                            );
-                          }
-                        },
-                        base: Container(
-                          width: 150,
-                          height: 150,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.grey[300],
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'DRIVE',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Speed: ${_currentSpeed.toStringAsFixed(2)}\nTurn: ${_currentTurn.toStringAsFixed(2)}',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: 200,
+                          height: 200,
+                          child: Joystick(
+                            mode: JoystickMode.all,
+                            listener: (details) {
+                              setState(() {
+                                _currentSpeed = -details.y;  // Invert Y so forward is positive
+                                _currentTurn = details.x;
+                              });
+                              if (_mqttClient.connectionStatus?.state ==
+                                  MqttConnectionState.connected) {
+                                final builder = MqttClientPayloadBuilder();
+                                builder.addString(
+                                    '{"turn": ${details.x.toStringAsFixed(2)}, "speed": ${(-details.y).toStringAsFixed(2)}}');
+                                _mqttClient.publishMessage(
+                                  'picar/control_request',
+                                  MqttQos.atLeastOnce,
+                                  builder.payload!,
+                                );
+                              }
+                            },
+                            base: Container(
+                              width: 150,
+                              height: 150,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.grey[300],
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'DRIVE',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            stick: Container(
+                              width: 50,
+                              height: 50,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Colors.grey[600],
                               ),
                             ),
                           ),
                         ),
-                        stick: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -428,12 +444,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     padding: const EdgeInsets.all(16.0),
                     child: Consumer<RobotState>(
                       builder: (context, robotState, child) {
-                        final videoUrl = robotState.videoUrl;
-                        if (videoUrl == null) {
-                          return const Center(
-                            child: Text('Waiting for video URL...'),
-                          );
-                        }
                         return Container(
                           width: 320,  
                           height: 240, 
@@ -445,7 +455,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             borderRadius: BorderRadius.circular(8),
                             child: Mjpeg(
                               isLive: true,
-                              stream: videoUrl,
+                              stream: RobotState.videoUrl,
                               error: (context, error, stack) {
                                 return const Center(
                                   child: Text('Error loading video stream'),

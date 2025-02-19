@@ -14,6 +14,7 @@ import 'widgets/position_control.dart';
 const String kMqttTopicStatusRequest = 'picar/status_request';
 const String kMqttTopicStatusResponse = 'picar/status_response';
 const String kMqttTopicControlRequest = 'picar/control_request';
+const String kMqttTopicStatusInfo = 'picar/status_info';          // Get battery level and ultrasonic distance
 
 void main() {
   // Set up logging
@@ -113,6 +114,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       kMqttTopicStatusRequest,
       MqttQos.atMostOnce,
       builder.payload!,
+    );
+
+    // Request status info for ultrasonic distance and battery
+    final statusBuilder = MqttClientPayloadBuilder();
+    statusBuilder.addString('status');
+    _mqttClient.publishMessage(
+      kMqttTopicStatusInfo,
+      MqttQos.atMostOnce,
+      statusBuilder.payload!,
     );
 
     // Cancel any existing timeout timer
@@ -240,6 +250,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Subscribe to response topic
     _mqttClient.subscribe(kMqttTopicStatusResponse, MqttQos.atMostOnce);
+    _mqttClient.subscribe(kMqttTopicStatusInfo, MqttQos.atMostOnce);
 
     // Set up message handler for status updates
     _mqttClient.updates!.listen((List<MqttReceivedMessage<MqttMessage>> c) {

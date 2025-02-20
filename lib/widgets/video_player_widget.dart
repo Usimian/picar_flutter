@@ -17,23 +17,24 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 320,  // Fixed width
-      height: 240, // Fixed height
+      width: 640,  // Fixed width
+      height: 480, // Fixed height
+      clipBehavior: Clip.antiAlias,  // Ensure clean corners
       decoration: BoxDecoration(
-        border: Border.all(color: Colors.grey),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Mjpeg(
-          isLive: true,
-          stream: widget.videoUrl,
-          error: (context, error, stack) {
-            return const Center(
-              child: Text('Error loading video stream'),
-            );
-          },
+        border: Border.all(
+          color: Colors.grey,
+          width: 1.0,  // Explicit border width
         ),
+        borderRadius: BorderRadius.zero
+      ),
+      child: Mjpeg(
+        isLive: true,
+        stream: widget.videoUrl,
+        error: (context, error, stack) {
+          return const Center(
+            child: Text('Error loading video stream'),
+          );
+        },
       ),
     );
   }

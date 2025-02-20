@@ -18,7 +18,12 @@ const String kMqttTopicStatusInfo = 'picar/status_info';          // Get battery
 
 void main() {
   // Set up logging
-  Logger.root.level = Level.ALL; // Capture all log levels
+  hierarchicalLoggingEnabled = true;  // Enable per-logger levels
+  Logger.root.level = Level.WARNING;
+  
+  // Set MQTT logging level
+  Logger('mqtt_client').level = Level.SEVERE;  // This controls the MQTT client package logging
+
   final mainLogger = Logger('Main');
   
   Logger.root.onRecord.listen((record) {
@@ -121,7 +126,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     statusBuilder.addString('status');
     _mqttClient.publishMessage(
       kMqttTopicStatusInfo,
-      MqttQos.atMostOnce,
+      MqttQos.atLeastOnce,  // Changed from atMostOnce to ensure delivery
       statusBuilder.payload!,
     );
 
@@ -144,7 +149,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _mqttClient = MqttServerClient(_mqttServerIp, 'picar_client_${DateTime.now().millisecondsSinceEpoch}');
     _mqttClient.port = 1883;
     _mqttClient.keepAlivePeriod = 20; // Reduced keep-alive period for faster detection
-    _mqttClient.logging(on: true);
+    _mqttClient.logging(on: false);
     _mqttClient.autoReconnect = true;
     _mqttClient.resubscribeOnAutoReconnect = true;
     _mqttClient.secure = false;

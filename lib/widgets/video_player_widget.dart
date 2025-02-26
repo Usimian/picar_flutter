@@ -17,8 +17,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 640,  // Fixed width
-      height: 480, // Fixed height
+      width: 320,  // Fixed width
+      height: 240, // Fixed height
       clipBehavior: Clip.antiAlias,  // Ensure clean corners
       decoration: BoxDecoration(
         border: Border.all(

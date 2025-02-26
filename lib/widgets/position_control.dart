@@ -94,9 +94,9 @@ class _PositionControlState extends State<PositionControl> {
           child: FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              'Distance: ${robotState.distance.toStringAsFixed(1)} cm',
+              'Distance: ${robotState.distance == -2 ? '∞' : robotState.distance.toStringAsFixed(1)} cm',
               style: TextStyle(
-                color: robotState.distance < 10 ? Colors.red : Colors.black,
+                color: robotState.distance == -2 ? Colors.red : (robotState.distance < 10 ? Colors.red : Colors.black),
                 fontWeight: FontWeight.bold,
               ),
             ),

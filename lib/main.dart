@@ -442,11 +442,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   // Calculate desired speed (negative Y for forward)
                                   double desiredSpeed = -details.y;
                                   
-                                  // If distance is less than 10cm and trying to move forward, force speed to 0
-                                  if (robotState.distance < 30 && desiredSpeed > 0) {
-                                    desiredSpeed = 0;
-                                  }
-
                                   setState(() {
                                     _currentSpeed = desiredSpeed;
                                     _currentTurn = details.x;

@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 
 class RobotState extends ChangeNotifier {
-  static const String videoUrl = "http://192.168.1.167:9000/mjpg";
+  // Change from static const to static String to allow updates
+  static String videoUrl = "http://192.168.1.167:9000/mjpg";
+  static bool isVideoAvailable = false;
+  static DateTime? lastVideoFrameTime;
+  static bool isVideoStalled = false;
+  
   double pos = 0.0;
   double vb = 0.0;
   double targetPosition = 0.0;
@@ -26,8 +31,44 @@ class RobotState extends ChangeNotifier {
       if (mockStatus.containsKey('adc')) adcStatus = mockStatus['adc'] ?? false;
       if (mockStatus.containsKey('camera')) cameraStatus = mockStatus['camera'] ?? false;
     }
-
+    
+    // Update video availability based on camera status
+    isVideoAvailable = cameraStatus;
+    
     notifyListeners();
+  }
+
+  // Method to update the video URL
+  static void updateVideoUrl(String newUrl) {
+    videoUrl = newUrl;
+    // No need for notifyListeners as this is a static method
+  }
+  
+  // Method to update video frame timestamp
+  static void updateVideoFrameTime() {
+    // Only update if a significant amount of time has passed since the last update
+    // or if this is the first update
+    final now = DateTime.now();
+    if (lastVideoFrameTime == null || 
+        now.difference(lastVideoFrameTime!).inMilliseconds > 100) {
+      lastVideoFrameTime = now;
+      isVideoStalled = false;
+    }
+  }
+  
+  // Method to check if video feed is stalled
+  static bool checkVideoStalled({Duration stallThreshold = const Duration(seconds: 5)}) {
+    if (lastVideoFrameTime == null) {
+      return true; // No frames received yet
+    }
+    
+    final timeSinceLastFrame = DateTime.now().difference(lastVideoFrameTime!);
+    if (timeSinceLastFrame > stallThreshold) {
+      isVideoStalled = true;
+      return true;
+    }
+    
+    return false;
   }
 
   void setTargetPosition(double newPosition) {
@@ -37,11 +78,11 @@ class RobotState extends ChangeNotifier {
 
   Color getBatteryColor() {
     if (vb <= 7.15) {
-      return const Color.fromARGB(255, 255, 0, 0);
-    } else if (vb <= 7.6) {
+      return const Color.fromARGB(255, 255, 17, 0);
+    } else if (vb <= 7.4) {
       return const Color.fromARGB(255, 255, 255, 0);
     } else {
-      return const Color.fromARGB(255, 0, 255, 8);
+      return const Color.fromARGB(255, 0, 255, 0);
     }
   }
 }

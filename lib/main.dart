@@ -4,7 +4,7 @@ import 'package:mqtt_client/mqtt_client.dart';
 import 'package:mqtt_client/mqtt_server_client.dart';
 import 'package:logging/logging.dart';
 import 'package:flutter_joystick/flutter_joystick.dart';
-import 'package:flutter_mjpeg/flutter_mjpeg.dart';
+import 'widgets/video_player_widget.dart';
 import 'dart:async';
 import 'dart:convert'; // Import the dart:convert library
 import 'models/robot_state.dart';
@@ -84,6 +84,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _connectionCheckTimer;
   Timer? _statusCheckTimer;
   Timer? _statusTimeoutTimer;
+  Timer? _videoFeedCheckTimer;
+  DateTime? _lastVideoStatusUpdate;
+  bool _isVideoFeedActive = false;
+  int _videoFeedFailCount = 0;
+  static const int maxVideoFailCount = 3;
   double _currentSpeed = 0.0;  // Add speed tracking
   double _currentTurn = 0.0;   // Add turn tracking
   double _currentPan = 0.0;    // Add pan tracking
@@ -92,15 +97,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _robotState = context.read<RobotState>();
+    
+    // Initialize logger
+    Logger.root.level = Level.ALL;
+    Logger.root.onRecord.listen((record) {
+      print('${record.level.name}: ${record.time}: ${record.loggerName}: ${record.message}');
+    });
+    
+    _logger.info('Dashboard initializing...');
+    
+    // Set initial video availability to false until we confirm connection
+    RobotState.isVideoAvailable = false;
+    
+    // Initialize robot state
+    _robotState = Provider.of<RobotState>(context, listen: false);
+    
+    // Setup MQTT client
     _setupMqttClient();
+    _connectClient();
     
     // Start periodic connection check
     _connectionCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
-      if (mounted && _mqttClient.connectionStatus?.state != MqttConnectionState.connected) {
-        setState(() {
-          _isMqttConnected = false;
-        });
+      if (mounted) {
+        if (_mqttClient.connectionStatus?.state != MqttConnectionState.connected) {
+          setState(() {
+            _isMqttConnected = false;
+          });
+        }
       }
     });
 
@@ -110,6 +133,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _requestRobotStatus();
       }
     });
+    
+    // Start video feed check timer
+    _startVideoFeedCheckTimer();
+  }
+
+  void _startVideoFeedCheckTimer() {
+    _videoFeedCheckTimer?.cancel();
+    _videoFeedCheckTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        _checkVideoFeedStatus();
+      }
+    });
+  }
+
+  void _checkVideoFeedStatus() {
+    final now = DateTime.now();
+    
+    // If we haven't received a video status update in 10 seconds, consider the feed stopped
+    if (_lastVideoStatusUpdate != null) {
+      final timeSinceLastUpdate = now.difference(_lastVideoStatusUpdate!);
+      if (timeSinceLastUpdate.inSeconds > 15) {
+        if (_isVideoFeedActive) {
+          _logger.warning('Video feed appears to be stopped (no status updates for ${timeSinceLastUpdate.inSeconds} seconds)');
+          setState(() {
+            _isVideoFeedActive = false;
+            _videoFeedFailCount++;
+          });
+          
+          // Update robot state to reflect video unavailability
+          RobotState.isVideoAvailable = false;
+          
+          // Try to restart video feed if failure count is below threshold
+          if (_videoFeedFailCount <= maxVideoFailCount) {
+            _requestVideoRestart();
+          }
+        }
+      }
+    }
+  }
+
+  void _requestVideoRestart() {
+    _logger.info('Attempting to restart video feed...');
+    
+    // Send a request to restart the video feed
+    final builder = MqttClientPayloadBuilder();
+    builder.addString('{"command": "restart_video"}');
+    _mqttClient.publishMessage(
+      kMqttTopicControlRequest,
+      MqttQos.atLeastOnce,
+      builder.payload!,
+    );
+    
+    // Update the timestamp to give the system time to restart
+    _lastVideoStatusUpdate = DateTime.now();
+  }
+
+  void _updateVideoFeedStatus(bool isActive) {
+    setState(() {
+      _isVideoFeedActive = isActive;
+      _lastVideoStatusUpdate = DateTime.now();
+      
+      // Reset fail count if video is active
+      if (isActive) {
+        _videoFeedFailCount = 0;
+      }
+    });
+    
+    // Update robot state to reflect video availability
+    RobotState.isVideoAvailable = isActive;
   }
 
   void _requestRobotStatus() {
@@ -278,8 +370,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
           
           // Update robot state with all parameters from the response
           _robotState.updateFromJson(jsonResponse);
+          
+          // Check if camera status is included in the response
+          if (jsonResponse.containsKey('camera')) {
+            final bool cameraAvailable = !(jsonResponse['camera'] ?? true);
+            _updateVideoFeedStatus(cameraAvailable);
+            _logger.info('Camera status updated: ${cameraAvailable ? 'Available' : 'Not Available'}');
+          }
         } catch (e) {
           _logger.warning('Failed to parse status response: $e');
+        }
+      } else if (c[0].topic == kMqttTopicStatusInfo) {
+        try {
+          _logger.info('Received status info: $payload');
+          final Map<String, dynamic> jsonResponse = jsonDecode(payload);
+          
+          // Update robot state with all parameters from the response
+          _robotState.updateFromJson(jsonResponse);
+          
+          // Check for video URL updates
+          if (jsonResponse.containsKey('video_url')) {
+            final String newVideoUrl = jsonResponse['video_url'] as String;
+            if (newVideoUrl.isNotEmpty && newVideoUrl != RobotState.videoUrl) {
+              RobotState.updateVideoUrl(newVideoUrl);
+              _logger.info('Video URL updated to: $newVideoUrl');
+              
+              // Reset video feed status when URL changes
+              _lastVideoStatusUpdate = DateTime.now();
+              _videoFeedFailCount = 0;
+            }
+          }
+          
+          // Check if video feed status is included
+          if (jsonResponse.containsKey('video_active')) {
+            final bool videoActive = jsonResponse['video_active'] ?? false;
+            _updateVideoFeedStatus(videoActive);
+          }
+        } catch (e) {
+          _logger.warning('Failed to parse status info: $e');
         }
       }
     });
@@ -290,6 +418,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _connectionCheckTimer?.cancel();
     _statusCheckTimer?.cancel();
     _statusTimeoutTimer?.cancel();
+    _videoFeedCheckTimer?.cancel();
     _mqttClient.disconnect();
     super.dispose();
   }
@@ -522,14 +651,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Mjpeg(
-                              isLive: true,
-                              stream: RobotState.videoUrl,
-                              error: (context, error, stack) {
-                                return const Center(
-                                  child: Text('Error loading video stream'),
-                                );
-                              },
+                            child: VideoPlayerWidget(
+                              videoUrl: RobotState.videoUrl,
                             ),
                           ),
                         );

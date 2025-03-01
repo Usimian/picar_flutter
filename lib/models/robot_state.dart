@@ -1,16 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:logging/logging.dart';
 
 class RobotState extends ChangeNotifier {
+  // Create a logger instance for this class
+  static final Logger _logger = Logger('RobotState');
+  
   // Change from static const to static String to allow updates
   static String videoUrl = "http://192.168.1.167:9000/mjpg";
-  static bool isVideoAvailable = false;
+
+  // Use a private backing field with a getter/setter to control updates
+  static bool _isVideoAvailable = false;
+  static bool get isVideoAvailable => _isVideoAvailable;
+  static set isVideoAvailable(bool value) {
+    // Only update if the value is actually changing
+    if (_isVideoAvailable != value) {
+      _isVideoAvailable = value;
+      // Log video availability changes for debugging
+      _logger.info('Video availability changed to: $value');
+    }
+  }
+
   static DateTime? lastVideoFrameTime;
   static bool isVideoStalled = false;
-  
+
   double pos = 0.0;
   double vb = 0.0;
   double targetPosition = 0.0;
   double distance = 0.0; // Distance from ultrasonic sensor
+
+  // Add a property to track if the robot is running
+  bool isRunning = false;
 
   // Status flags
   bool gpioStatus = false;
@@ -19,55 +38,58 @@ class RobotState extends ChangeNotifier {
   bool cameraStatus = true; // true means test pattern, false means real camera
 
   void updateFromJson(Map<String, dynamic> json) {
-    if (json.containsKey('Pos')) pos = json['Pos']?.toDouble() ?? 0.0;
     if (json.containsKey('Vb')) vb = json['Vb']?.toDouble() ?? 0.0;
-    if (json.containsKey('distance')) distance = json['distance']?.toDouble() ?? 0.0;
-    if (json.containsKey('camera')) cameraStatus = !(json['camera'] ?? true);
+    if (json.containsKey('distance')) {
+      distance = json['distance']?.toDouble() ?? 0.0;
+    }
+
+    // Update isRunning based on battery voltage
+    isRunning = vb > 0.0;
 
     if (json.containsKey('mock_status')) {
       final mockStatus = json['mock_status'] as Map<String, dynamic>;
-      if (mockStatus.containsKey('gpio')) gpioStatus = mockStatus['gpio'] ?? false;
+      if (mockStatus.containsKey('gpio')) {
+        gpioStatus = mockStatus['gpio'] ?? false;
+      }
       if (mockStatus.containsKey('i2c')) i2cStatus = mockStatus['i2c'] ?? false;
       if (mockStatus.containsKey('adc')) adcStatus = mockStatus['adc'] ?? false;
-      if (mockStatus.containsKey('camera')) cameraStatus = mockStatus['camera'] ?? false;
+      if (mockStatus.containsKey('camera')) {
+        cameraStatus = mockStatus['camera'] ?? false;
+      }
     }
-    
+
     // Update video availability based on camera status
+    // Use the setter to ensure proper state updates
     isVideoAvailable = cameraStatus;
-    
+
     notifyListeners();
   }
 
-  // Method to update the video URL
-  static void updateVideoUrl(String newUrl) {
-    videoUrl = newUrl;
-    // No need for notifyListeners as this is a static method
-  }
-  
   // Method to update video frame timestamp
   static void updateVideoFrameTime() {
     // Only update if a significant amount of time has passed since the last update
     // or if this is the first update
     final now = DateTime.now();
-    if (lastVideoFrameTime == null || 
+    if (lastVideoFrameTime == null ||
         now.difference(lastVideoFrameTime!).inMilliseconds > 100) {
       lastVideoFrameTime = now;
       isVideoStalled = false;
     }
   }
-  
+
   // Method to check if video feed is stalled
-  static bool checkVideoStalled({Duration stallThreshold = const Duration(seconds: 5)}) {
+  static bool checkVideoStalled(
+      {Duration stallThreshold = const Duration(seconds: 5)}) {
     if (lastVideoFrameTime == null) {
       return true; // No frames received yet
     }
-    
+
     final timeSinceLastFrame = DateTime.now().difference(lastVideoFrameTime!);
     if (timeSinceLastFrame > stallThreshold) {
       isVideoStalled = true;
       return true;
     }
-    
+
     return false;
   }
 

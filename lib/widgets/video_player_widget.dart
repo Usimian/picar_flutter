@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_mjpeg/flutter_mjpeg.dart';
 import 'dart:async';
 import '../models/robot_state.dart';
+import 'package:provider/provider.dart';
 
 // Custom preprocessor to detect frame updates
 class FrameDetectionPreprocessor extends MjpegPreprocessor {
@@ -56,6 +57,27 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     
     // Initially set connection status based on robot state
     _isConnected = RobotState.isVideoAvailable;
+    
+    // Force a rebuild when the app starts to ensure video shows if available
+    if (_isConnected) {
+      _requestRebuild();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Get the current robot running state
+    final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
+    
+    // Make sure we have the latest video availability state
+    // Only consider video available if the robot is running
+    final bool videoAvailable = robotRunning && RobotState.isVideoAvailable;
+    
+    if (_isConnected != videoAvailable) {
+      _isConnected = videoAvailable;
+      _requestRebuild();
+    }
   }
 
   @override
@@ -66,22 +88,42 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     super.dispose();
   }
 
-  // Add a debounce timer for rebuilds
+  // Improve the debounce timer for rebuilds with a true debounce pattern
   void _startRebuildDebounceTimer() {
-    _rebuildDebounceTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+    // Cancel any existing timer first
+    _rebuildDebounceTimer?.cancel();
+    
+    // Create a periodic check, but only rebuild when needed
+    _rebuildDebounceTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
       if (_needsRebuild && mounted) {
         setState(() {
           _needsRebuild = false;
         });
       }
+      
+      // Also check if RobotState.isVideoAvailable has changed
+      // Only consider video available if the robot is running
+      final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
+      final bool videoAvailable = robotRunning && RobotState.isVideoAvailable;
+      
+      if (_isConnected != videoAvailable) {
+        _isConnected = videoAvailable;
+        setState(() {});
+      }
     });
+  }
+  
+  // Request a rebuild with proper debouncing
+  void _requestRebuild() {
+    _needsRebuild = true;
+    // No immediate setState - the periodic timer will handle it
   }
 
   void _startRetryTimer() {
     _retryTimer?.cancel();
     _retryTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
       if (!_isConnected && mounted && _retryCount < maxRetries) {
-        _needsRebuild = true;
+        _requestRebuild();
         _streamKey = UniqueKey(); // Force stream reconnection
         _retryCount++;
         _isConnected = true; // Assume connected until error occurs
@@ -90,7 +132,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       } else if (_retryCount >= maxRetries) {
         // After max retries, slow down retry attempts
         timer.cancel();
-        Timer(const Duration(seconds: 10), () {
+        Timer(const Duration(seconds: 5), () {
           if (mounted) {
             _retryCount = 0;
             _startRetryTimer();
@@ -104,7 +146,11 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void _startFrameCheckTimer() {
     _frameCheckTimer?.cancel();
     _frameCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (mounted && _isConnected && _lastFrameTimestamp != null) {
+      // Get the current robot running state
+      final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
+      
+      // Only check for video stalls if the robot is running
+      if (mounted && _isConnected && _lastFrameTimestamp != null && robotRunning) {
         final now = DateTime.now();
         final timeSinceLastFrame = now.difference(_lastFrameTimestamp!);
         
@@ -113,10 +159,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         
         if ((timeSinceLastFrame > stallThreshold || isStalled) && !_isVideoStalled) {
           _isVideoStalled = true;
-          _needsRebuild = true;
+          _requestRebuild(); // Use the debounce method instead
           
           // Update robot state to reflect video unavailability
-          RobotState.isVideoAvailable = false;
+          // Only update if we're the first to detect the issue
+          if (RobotState.isVideoAvailable) {
+            RobotState.isVideoAvailable = false;
+          }
           
           // Try to restart the video stream - but only do this once per stall detection
           _streamKey = UniqueKey();
@@ -129,9 +178,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void _updateFrameTimestamp() {
     final now = DateTime.now();
     
-    // Only update if significant time has passed since last update
+    // Increase threshold to reduce sensitivity (from 100ms to 250ms)
     if (_lastFrameTimestamp == null || 
-        now.difference(_lastFrameTimestamp!).inMilliseconds > 100) {
+        now.difference(_lastFrameTimestamp!).inMilliseconds > 250) {
       
       _lastFrameTimestamp = now;
       
@@ -140,10 +189,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       
       if (_isVideoStalled) {
         _isVideoStalled = false;
-        _needsRebuild = true;
+        _requestRebuild(); // Use the debounce method instead
         
         // Update robot state to reflect video availability
-        RobotState.isVideoAvailable = true;
+        // Only update if we're the first to detect recovery
+        if (!RobotState.isVideoAvailable) {
+          RobotState.isVideoAvailable = true;
+        }
       }
     }
   }
@@ -151,15 +203,18 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void _handleError() {
     if (!mounted) return;
     
-    // Use the debounce flag instead of immediate setState
+    // Use the debounce method instead of immediate setState
     _isConnected = false;
-    _needsRebuild = true;
+    _requestRebuild();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Check if video is available according to robot state
-    final bool videoAvailable = RobotState.isVideoAvailable;
+    // Use local variables to prevent rebuilds due to state changes during build
+    final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
+    final bool videoAvailable = robotRunning && RobotState.isVideoAvailable;
+    final bool localIsConnected = _isConnected;
+    final bool localIsStalled = _isVideoStalled;
     
     if (!videoAvailable) {
       return Container(
@@ -197,7 +252,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         ),
         borderRadius: BorderRadius.zero
       ),
-      child: _isConnected 
+      child: localIsConnected 
         ? Stack(
             children: [
               Mjpeg(
@@ -227,7 +282,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
                 }),
               ),
               // Show stalled indicator if video is stalled
-              if (_isVideoStalled)
+              if (localIsStalled)
                 Container(
                   color: Colors.black54,
                   child: const Center(

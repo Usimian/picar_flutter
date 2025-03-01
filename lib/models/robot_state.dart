@@ -4,7 +4,7 @@ import 'package:logging/logging.dart';
 class RobotState extends ChangeNotifier {
   // Create a logger instance for this class
   static final Logger _logger = Logger('RobotState');
-  
+
   // Change from static const to static String to allow updates
   static String videoUrl = "http://192.168.1.167:9000/mjpg";
 
@@ -35,7 +35,7 @@ class RobotState extends ChangeNotifier {
   bool gpioStatus = false;
   bool i2cStatus = false;
   bool adcStatus = false;
-  bool cameraStatus = true; // true means test pattern, false means real camera
+  bool cameraStatus = false; // true means test pattern, false means real camera
 
   void updateFromJson(Map<String, dynamic> json) {
     if (json.containsKey('Vb')) vb = json['Vb']?.toDouble() ?? 0.0;

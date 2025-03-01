@@ -84,8 +84,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late MqttServerClient _mqttClient;
   final _logger = Logger('DashboardScreen');
   bool _isMqttConnected = false;
-  bool _isRobotRunning = false;
-  Timer? _connectionCheckTimer;
   Timer? _statusCheckTimer;
   Timer? _statusTimeoutTimer;
   Timer? _videoFeedCheckTimer;
@@ -118,38 +116,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Setup MQTT client
     _setupMqttClient();
 
-    // Start periodic connection check with a longer interval
-    _connectionCheckTimer =
-        Timer.periodic(const Duration(seconds: 10), (timer) {
+    // Start periodic status check which will also handle connection checks
+    _statusCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       if (mounted) {
-        final connectionState = _mqttClient.connectionStatus?.state;
-        final isConnected = connectionState == MqttConnectionState.connected;
-
-        _logger.fine(
-            'Connection check: state=$connectionState, isConnected=$isConnected, _isMqttConnected=$_isMqttConnected');
-
-        // Only update state if there's a change to avoid unnecessary rebuilds
-        if (isConnected != _isMqttConnected) {
-          setState(() {
-            _isMqttConnected = isConnected;
-          });
-
-          // If we've detected a disconnection, try to reconnect
-          if (!isConnected &&
-              connectionState != MqttConnectionState.connecting) {
-            _logger.info(
-                'Connection check detected disconnection, attempting to reconnect...');
+        if (_isMqttConnected) {
+          // Request status regardless of whether robot is running or not
+          // The response will determine if the robot is running
+          _logger.info('Requesting robot status...');
+          _requestRobotStatus();
+        } else {
+          // If not connected, check connection
+          final connectionState = _mqttClient.connectionStatus?.state;
+          if (connectionState != MqttConnectionState.connecting) {
+            _logger.info('Not connected to MQTT, attempting to connect...');
             _connectClient();
           }
         }
-      }
-    });
-
-    // Start periodic status check with a longer interval
-    _statusCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
-      if (mounted && _isMqttConnected) {
-        _logger.info('Requesting robot status...');
-        _requestRobotStatus();
       }
     });
 
@@ -246,11 +228,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     // Start a new timeout timer
     _statusTimeoutTimer = Timer(const Duration(seconds: 1), () {
       if (mounted) {
-        setState(() {
-          _isRobotRunning = false; // Set to stopped if no response received
-        });
-        // Set battery voltage to 0 when no response
+        // Set battery voltage to 0 when no response, which will set isRunning to false
         _robotState.updateFromJson({'Vb': 0.0});
+
+        // Connection check is now handled by the status check timer
+        // which will attempt to reconnect on the next cycle
+        _logger.warning('No status response received, connection may be lost');
       }
     });
   }
@@ -424,12 +407,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         try {
           _logger.info('Received status response: $payload');
           final jsonResponse = jsonDecode(payload) as Map<String, dynamic>;
-          final isRunning = (jsonResponse['Vb']?.toDouble() ?? 0.0) > 0;
 
-          setState(() => _isRobotRunning = isRunning);
+          // Update the robot state which will set isRunning based on battery voltage
           _robotState.updateFromJson(jsonResponse);
 
-          final cameraAvailable = isRunning &&
+          final cameraAvailable = _robotState.isRunning &&
               jsonResponse.containsKey('mock_status') &&
               jsonResponse['mock_status'].containsKey('camera') &&
               !(jsonResponse['mock_status']['camera'] ?? true);
@@ -446,7 +428,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
-    _connectionCheckTimer?.cancel();
     _statusCheckTimer?.cancel();
     _statusTimeoutTimer?.cancel();
     _videoFeedCheckTimer?.cancel();
@@ -480,61 +461,77 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(width: 16),
 
                 // GPIO Status
-                Icon(
-                  Icons.car_repair,
-                  color: !_isRobotRunning
-                      ? const Color.fromARGB(
-                          255, 255, 0, 0) // Red when not running
-                      : context.watch<RobotState>().gpioStatus
+                Consumer<RobotState>(
+                  builder: (context, robotState, child) {
+                    return Icon(
+                      Icons.car_repair,
+                      color: !robotState.isRunning
                           ? const Color.fromARGB(
-                              255, 0, 0, 255) // Blue when running and true
-                          : const Color.fromARGB(
-                              255, 0, 255, 8), // Green when running and false
-                  size: 24,
+                              255, 255, 0, 0) // Red when not running
+                          : robotState.gpioStatus
+                              ? const Color.fromARGB(
+                                  255, 0, 0, 255) // Blue when running and true
+                              : const Color.fromARGB(255, 0, 255,
+                                  8), // Green when running and false
+                      size: 24,
+                    );
+                  },
                 ),
                 const SizedBox(width: 4),
                 const Text('GPIO'),
                 const SizedBox(width: 8),
 
                 // I2C Status
-                Icon(
-                  Icons.cable,
-                  color: !_isRobotRunning
-                      ? const Color.fromARGB(255, 255, 0, 0)
-                      : context.watch<RobotState>().i2cStatus
-                          ? const Color.fromARGB(255, 0, 0, 255)
-                          : const Color.fromARGB(255, 0, 255, 8),
-                  size: 24,
+                Consumer<RobotState>(
+                  builder: (context, robotState, child) {
+                    return Icon(
+                      Icons.cable,
+                      color: !robotState.isRunning
+                          ? const Color.fromARGB(255, 255, 0, 0)
+                          : robotState.i2cStatus
+                              ? const Color.fromARGB(255, 0, 0, 255)
+                              : const Color.fromARGB(255, 0, 255, 8),
+                      size: 24,
+                    );
+                  },
                 ),
                 const SizedBox(width: 4),
                 const Text('I2C'),
                 const SizedBox(width: 8),
 
                 // ADC Status
-                Icon(
-                  Icons.memory,
-                  color: !_isRobotRunning
-                      ? const Color.fromARGB(255, 255, 0, 0)
-                      : context.watch<RobotState>().adcStatus
-                          ? const Color.fromARGB(255, 0, 0, 255)
-                          : const Color.fromARGB(255, 0, 255, 8),
-                  size: 24,
+                Consumer<RobotState>(
+                  builder: (context, robotState, child) {
+                    return Icon(
+                      Icons.memory,
+                      color: !robotState.isRunning
+                          ? const Color.fromARGB(255, 255, 0, 0)
+                          : robotState.adcStatus
+                              ? const Color.fromARGB(255, 0, 0, 255)
+                              : const Color.fromARGB(255, 0, 255, 8),
+                      size: 24,
+                    );
+                  },
                 ),
                 const SizedBox(width: 4),
                 const Text('ADC'),
                 const SizedBox(width: 8),
 
                 // Camera Status
-                Icon(
-                  Icons.camera_alt,
-                  color: !_isRobotRunning
-                      ? const Color.fromARGB(255, 255, 0, 0)
-                      : context.watch<RobotState>().cameraStatus
-                          ? const Color.fromARGB(
-                              255, 0, 0, 255) // Blue when using test pattern
-                          : const Color.fromARGB(
-                              255, 0, 255, 8), // Green when using real camera
-                  size: 24,
+                Consumer<RobotState>(
+                  builder: (context, robotState, child) {
+                    return Icon(
+                      Icons.camera_alt,
+                      color: !robotState.isRunning
+                          ? const Color.fromARGB(255, 255, 0, 0)
+                          : robotState.cameraStatus
+                              ? const Color.fromARGB(255, 0, 0,
+                                  255) // Blue when using test pattern
+                              : const Color.fromARGB(255, 0, 255,
+                                  8), // Green when using real camera
+                      size: 24,
+                    );
+                  },
                 ),
                 const SizedBox(width: 4),
                 const Text('Camera'),
@@ -553,15 +550,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(width: 16),
 
                 // Robot Running Status
-                Icon(
-                  Icons.run_circle,
-                  color: _isRobotRunning
-                      ? const Color.fromARGB(255, 0, 255, 8)
-                      : const Color.fromARGB(255, 255, 0, 0),
-                  size: 24,
+                Consumer<RobotState>(
+                  builder: (context, robotState, child) {
+                    return Icon(
+                      Icons.run_circle,
+                      color: robotState.isRunning
+                          ? const Color.fromARGB(255, 0, 255, 8)
+                          : const Color.fromARGB(255, 255, 0, 0),
+                      size: 24,
+                    );
+                  },
                 ),
                 const SizedBox(width: 4),
-                Text(_isRobotRunning ? 'Running' : 'Stopped'),
+                Consumer<RobotState>(
+                  builder: (context, robotState, child) {
+                    return Text(robotState.isRunning ? 'Running' : 'Stopped');
+                  },
+                ),
                 const SizedBox(width: 16),
               ],
             ),

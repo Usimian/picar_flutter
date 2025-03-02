@@ -205,7 +205,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Update robot state to reflect video availability
     _logger.info('Setting video availability to: $isActive');
-    RobotState.isVideoAvailable = isActive;
+    // Note: We're letting RobotState.updateFromJson handle this now
+    // RobotState.isVideoAvailable = isActive;
   }
 
   void _requestRobotStatus() {
@@ -411,6 +412,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Update the robot state which will set isRunning based on battery voltage
           _robotState.updateFromJson(jsonResponse);
 
+          // The camera is available when:
+          // 1. The robot is running (isRunning is true)
+          // 2. mock_status exists in the response
+          // 3. camera exists in mock_status
+          // 4. camera is false (indicating real camera, not test pattern)
           final cameraAvailable = _robotState.isRunning &&
               jsonResponse.containsKey('mock_status') &&
               jsonResponse['mock_status'].containsKey('camera') &&
@@ -418,7 +424,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           _updateVideoFeedStatus(cameraAvailable);
           _logger.info(
-              'Camera status: ${cameraAvailable ? 'Available' : 'Not Available'}');
+              'Camera status: ${cameraAvailable ? 'Available' : 'Not Available'}, ' +
+                  'Robot running: ${_robotState.isRunning}, ' +
+                  'Camera test pattern: ${_robotState.cameraStatus}');
         } catch (e) {
           _logger.warning('Failed to parse status response: $e');
         }
@@ -579,9 +587,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(8.0),
             child: Consumer<RobotState>(
               builder: (context, robotState, child) {
-                return Text(
-                  'Video URL: ${RobotState.videoUrl}',
-                  style: const TextStyle(fontSize: 14),
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'Video URL: ${RobotState.videoUrl}',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(width: 8),
+                    // Add a button to manually test the video connection
+                    ElevatedButton(
+                      onPressed: () {
+                        // Force video availability to true for testing
+                        RobotState.isVideoAvailable = true;
+                        _logger.info(
+                            'Manually set video availability to true for testing');
+
+                        // Show a snackbar to confirm
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Testing video connection...'),
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: const Text('Test Video'),
+                    ),
+                  ],
                 );
               },
             ),

@@ -37,13 +37,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   Key _streamKey = UniqueKey();
   int _retryCount = 0;
   static const int maxRetries = 3;
-  
+
   // Add variables for video feed monitoring
   DateTime? _lastFrameTimestamp;
   Timer? _frameCheckTimer;
   bool _isVideoStalled = false;
   static const Duration stallThreshold = Duration(seconds: 3);
-  
+
   // Add debounce variables to prevent excessive rebuilds
   bool _needsRebuild = false;
   Timer? _rebuildDebounceTimer;
@@ -54,10 +54,10 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     _startRetryTimer();
     _startFrameCheckTimer();
     _startRebuildDebounceTimer();
-    
+
     // Initially set connection status based on robot state
     _isConnected = RobotState.isVideoAvailable;
-    
+
     // Force a rebuild when the app starts to ensure video shows if available
     if (_isConnected) {
       _requestRebuild();
@@ -68,16 +68,21 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Get the current robot running state
-    final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
-    
+    final robotRunning =
+        Provider.of<RobotState>(context, listen: false).isRunning;
+
     // Make sure we have the latest video availability state
     // Only consider video available if the robot is running
     final bool videoAvailable = robotRunning && RobotState.isVideoAvailable;
-    
+
     if (_isConnected != videoAvailable) {
       _isConnected = videoAvailable;
       _requestRebuild();
     }
+
+    // Debug print to help troubleshoot
+    print(
+        'VideoPlayerWidget.didChangeDependencies: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, videoUrl=${widget.videoUrl}');
   }
 
   @override
@@ -92,27 +97,29 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void _startRebuildDebounceTimer() {
     // Cancel any existing timer first
     _rebuildDebounceTimer?.cancel();
-    
+
     // Create a periodic check, but only rebuild when needed
-    _rebuildDebounceTimer = Timer.periodic(const Duration(milliseconds: 250), (timer) {
+    _rebuildDebounceTimer =
+        Timer.periodic(const Duration(milliseconds: 250), (timer) {
       if (_needsRebuild && mounted) {
         setState(() {
           _needsRebuild = false;
         });
       }
-      
+
       // Also check if RobotState.isVideoAvailable has changed
       // Only consider video available if the robot is running
-      final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
+      final robotRunning =
+          Provider.of<RobotState>(context, listen: false).isRunning;
       final bool videoAvailable = robotRunning && RobotState.isVideoAvailable;
-      
+
       if (_isConnected != videoAvailable) {
         _isConnected = videoAvailable;
         setState(() {});
       }
     });
   }
-  
+
   // Request a rebuild with proper debouncing
   void _requestRebuild() {
     _needsRebuild = true;
@@ -147,26 +154,32 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     _frameCheckTimer?.cancel();
     _frameCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
       // Get the current robot running state
-      final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
-      
+      final robotRunning =
+          Provider.of<RobotState>(context, listen: false).isRunning;
+
       // Only check for video stalls if the robot is running
-      if (mounted && _isConnected && _lastFrameTimestamp != null && robotRunning) {
+      if (mounted &&
+          _isConnected &&
+          _lastFrameTimestamp != null &&
+          robotRunning) {
         final now = DateTime.now();
         final timeSinceLastFrame = now.difference(_lastFrameTimestamp!);
-        
+
         // Also check video stalled status in RobotState
-        final isStalled = RobotState.checkVideoStalled(stallThreshold: stallThreshold);
-        
-        if ((timeSinceLastFrame > stallThreshold || isStalled) && !_isVideoStalled) {
+        final isStalled =
+            RobotState.checkVideoStalled(stallThreshold: stallThreshold);
+
+        if ((timeSinceLastFrame > stallThreshold || isStalled) &&
+            !_isVideoStalled) {
           _isVideoStalled = true;
           _requestRebuild(); // Use the debounce method instead
-          
+
           // Update robot state to reflect video unavailability
           // Only update if we're the first to detect the issue
           if (RobotState.isVideoAvailable) {
             RobotState.isVideoAvailable = false;
           }
-          
+
           // Try to restart the video stream - but only do this once per stall detection
           _streamKey = UniqueKey();
         }
@@ -177,20 +190,19 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   // Add method to update frame timestamp
   void _updateFrameTimestamp() {
     final now = DateTime.now();
-    
+
     // Increase threshold to reduce sensitivity (from 100ms to 250ms)
-    if (_lastFrameTimestamp == null || 
+    if (_lastFrameTimestamp == null ||
         now.difference(_lastFrameTimestamp!).inMilliseconds > 250) {
-      
       _lastFrameTimestamp = now;
-      
+
       // Also update the frame timestamp in RobotState
       RobotState.updateVideoFrameTime();
-      
+
       if (_isVideoStalled) {
         _isVideoStalled = false;
         _requestRebuild(); // Use the debounce method instead
-        
+
         // Update robot state to reflect video availability
         // Only update if we're the first to detect recovery
         if (!RobotState.isVideoAvailable) {
@@ -202,7 +214,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   void _handleError() {
     if (!mounted) return;
-    
+
     // Use the debounce method instead of immediate setState
     _isConnected = false;
     _requestRebuild();
@@ -211,110 +223,131 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   Widget build(BuildContext context) {
     // Use local variables to prevent rebuilds due to state changes during build
-    final robotRunning = Provider.of<RobotState>(context, listen: false).isRunning;
+    final robotRunning =
+        Provider.of<RobotState>(context, listen: false).isRunning;
     final bool videoAvailable = robotRunning && RobotState.isVideoAvailable;
     final bool localIsConnected = _isConnected;
     final bool localIsStalled = _isVideoStalled;
-    
-    if (!videoAvailable) {
+
+    // Debug print to help troubleshoot
+    print(
+        'VideoPlayerWidget.build: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, localIsConnected=$localIsConnected, videoUrl=${widget.videoUrl}');
+
+    // Always attempt to show the video feed if the robot is running
+    // This is a more permissive approach that will try to connect even if isVideoAvailable is false
+    if (!robotRunning) {
       return Container(
         width: 320,
         height: 240,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
-          border: Border.all(
-            color: Colors.grey,
-            width: 1.0,
-          ),
-          borderRadius: BorderRadius.zero
-        ),
+            border: Border.all(
+              color: Colors.grey,
+              width: 1.0,
+            ),
+            borderRadius: BorderRadius.zero),
         child: const Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.videocam_off, size: 48, color: Colors.grey),
               SizedBox(height: 8),
-              Text('Camera not available', style: TextStyle(color: Colors.grey)),
+              Text('Robot not running', style: TextStyle(color: Colors.grey)),
             ],
           ),
         ),
       );
     }
-    
-    return Container(
-      width: 320,  // Fixed width
-      height: 240, // Fixed height
-      clipBehavior: Clip.antiAlias,  // Ensure clean corners
-      decoration: BoxDecoration(
-        border: Border.all(
-          color: Colors.grey,
-          width: 1.0,  // Explicit border width
-        ),
-        borderRadius: BorderRadius.zero
-      ),
-      child: localIsConnected 
-        ? Stack(
-            children: [
-              Mjpeg(
-                key: _streamKey,
-                isLive: true,
-                stream: widget.videoUrl,
-                error: (context, error, stack) {
-                  _handleError();
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                        const SizedBox(height: 8),
-                        Text('Connection error: Retry $_retryCount/$maxRetries'),
-                        const SizedBox(height: 8),
-                        if (_retryCount < maxRetries)
-                          const Text('Attempting to reconnect...'),
-                      ],
-                    ),
-                  );
-                },
-                fit: BoxFit.contain,
-                // Add a custom preprocessor to detect frames
-                preprocessor: FrameDetectionPreprocessor(() {
-                  _updateFrameTimestamp();
-                }),
-              ),
-              // Show stalled indicator if video is stalled
-              if (localIsStalled)
-                Container(
-                  color: Colors.black54,
-                  child: const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.video_stable, size: 48, color: Colors.orange),
-                        SizedBox(height: 8),
-                        Text('Video feed stalled', 
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        SizedBox(height: 8),
-                        Text('Attempting to restart...', 
-                          style: TextStyle(color: Colors.white)),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          )
-        : Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.orange),
-                const SizedBox(height: 8),
-                Text('Connection error: Retry $_retryCount/$maxRetries'),
-                const SizedBox(height: 8),
-                if (_retryCount < maxRetries)
-                  const Text('Attempting to reconnect...'),
-              ],
+
+    // Ensure the video URL is valid
+    final String videoUrl = widget.videoUrl.trim();
+    if (videoUrl.isEmpty) {
+      print('VideoPlayerWidget: Empty video URL');
+      return Container(
+        width: 320,
+        height: 240,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+            border: Border.all(
+              color: Colors.grey,
+              width: 1.0,
             ),
+            borderRadius: BorderRadius.zero),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error, size: 48, color: Colors.red),
+              SizedBox(height: 8),
+              Text('Invalid video URL', style: TextStyle(color: Colors.grey)),
+            ],
           ),
+        ),
+      );
+    }
+
+    return Container(
+      width: 320, // Fixed width
+      height: 240, // Fixed height
+      clipBehavior: Clip.antiAlias, // Ensure clean corners
+      decoration: BoxDecoration(
+          border: Border.all(
+            color: Colors.grey,
+            width: 1.0, // Explicit border width
+          ),
+          borderRadius: BorderRadius.zero),
+      child: Stack(
+        children: [
+          Mjpeg(
+            key: _streamKey,
+            isLive: true,
+            stream: videoUrl,
+            error: (context, error, stack) {
+              print('VideoPlayerWidget: Error loading video: $error');
+              _handleError();
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline,
+                        size: 48, color: Colors.red),
+                    const SizedBox(height: 8),
+                    Text('Connection error: Retry $_retryCount/$maxRetries'),
+                    const SizedBox(height: 8),
+                    if (_retryCount < maxRetries)
+                      const Text('Attempting to reconnect...'),
+                  ],
+                ),
+              );
+            },
+            fit: BoxFit.contain,
+            // Add a custom preprocessor to detect frames
+            preprocessor: FrameDetectionPreprocessor(() {
+              _updateFrameTimestamp();
+            }),
+          ),
+          // Show stalled indicator if video is stalled
+          if (localIsStalled)
+            Container(
+              color: Colors.black54,
+              child: const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.video_stable, size: 48, color: Colors.orange),
+                    SizedBox(height: 8),
+                    Text('Video feed stalled',
+                        style: TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    SizedBox(height: 8),
+                    Text('Attempting to restart...',
+                        style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

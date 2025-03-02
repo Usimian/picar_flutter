@@ -20,6 +20,14 @@ class RobotState extends ChangeNotifier {
     }
   }
 
+  // Add a method to update the video URL
+  static void updateVideoUrl(String newUrl) {
+    if (videoUrl != newUrl && newUrl.isNotEmpty) {
+      _logger.info('Updating video URL from $videoUrl to $newUrl');
+      videoUrl = newUrl;
+    }
+  }
+
   static DateTime? lastVideoFrameTime;
   static bool isVideoStalled = false;
 
@@ -58,9 +66,30 @@ class RobotState extends ChangeNotifier {
       }
     }
 
-    // Update video availability based on camera status
+    // Check if the response contains a video URL
+    if (json.containsKey('video_url') && json['video_url'] is String) {
+      final newVideoUrl = json['video_url'] as String;
+      if (newVideoUrl.isNotEmpty) {
+        updateVideoUrl(newVideoUrl);
+      }
+    }
+
+    // Update video availability based on camera status and isRunning
     // Use the setter to ensure proper state updates
-    isVideoAvailable = cameraStatus;
+    // Note: cameraStatus is true for test pattern, false for real camera
+    // So we want video to be available when cameraStatus is false (real camera)
+    if (isRunning) {
+      // Only update video availability if the robot is running
+      isVideoAvailable =
+          !cameraStatus; // Real camera when cameraStatus is false
+
+      // Debug print to help troubleshoot
+      _logger.info(
+          'RobotState.updateFromJson: isRunning=$isRunning, cameraStatus=$cameraStatus, isVideoAvailable=$isVideoAvailable, videoUrl=$videoUrl');
+    } else {
+      // If robot is not running, video is not available
+      isVideoAvailable = false;
+    }
 
     notifyListeners();
   }

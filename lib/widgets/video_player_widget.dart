@@ -3,6 +3,7 @@ import 'package:flutter_mjpeg/flutter_mjpeg.dart';
 import 'dart:async';
 import '../models/robot_state.dart';
 import 'package:provider/provider.dart';
+import 'package:logging/logging.dart';
 
 // Custom preprocessor to detect frame updates
 class FrameDetectionPreprocessor extends MjpegPreprocessor {
@@ -32,6 +33,9 @@ class VideoPlayerWidget extends StatefulWidget {
 }
 
 class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
+  // Add logger instance
+  final _logger = Logger('VideoPlayerWidget');
+
   bool _isConnected = false;
   Timer? _retryTimer;
   Key _streamKey = UniqueKey();
@@ -80,9 +84,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       _requestRebuild();
     }
 
-    // Debug print to help troubleshoot
-    print(
-        'VideoPlayerWidget.didChangeDependencies: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, videoUrl=${widget.videoUrl}');
+    // Debug log to help troubleshoot
+    _logger.info(
+        'didChangeDependencies: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, videoUrl=${widget.videoUrl}');
   }
 
   @override
@@ -229,9 +233,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     final bool localIsConnected = _isConnected;
     final bool localIsStalled = _isVideoStalled;
 
-    // Debug print to help troubleshoot
-    print(
-        'VideoPlayerWidget.build: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, localIsConnected=$localIsConnected, videoUrl=${widget.videoUrl}');
+    // Debug log to help troubleshoot
+    _logger.info(
+        'build: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, localIsConnected=$localIsConnected, videoUrl=${widget.videoUrl}');
 
     // Always attempt to show the video feed if the robot is running
     // This is a more permissive approach that will try to connect even if isVideoAvailable is false
@@ -262,7 +266,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     // Ensure the video URL is valid
     final String videoUrl = widget.videoUrl.trim();
     if (videoUrl.isEmpty) {
-      print('VideoPlayerWidget: Empty video URL');
+      _logger.warning('Empty video URL');
       return Container(
         width: 320,
         height: 240,
@@ -303,7 +307,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             isLive: true,
             stream: videoUrl,
             error: (context, error, stack) {
-              print('VideoPlayerWidget: Error loading video: $error');
+              _logger.warning('Error loading video: $error');
               _handleError();
               return Center(
                 child: Column(

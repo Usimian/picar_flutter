@@ -424,9 +424,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           _updateVideoFeedStatus(cameraAvailable);
           _logger.info(
-              'Camera status: ${cameraAvailable ? 'Available' : 'Not Available'}, ' +
-                  'Robot running: ${_robotState.isRunning}, ' +
-                  'Camera test pattern: ${_robotState.cameraStatus}');
+              'Camera status: ${cameraAvailable ? 'Available' : 'Not Available'}, '
+              'Robot running: ${_robotState.isRunning}, '
+              'Camera test pattern: ${_robotState.cameraStatus}');
         } catch (e) {
           _logger.warning('Failed to parse status response: $e');
         }

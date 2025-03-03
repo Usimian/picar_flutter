@@ -52,6 +52,7 @@ class RobotState extends ChangeNotifier {
     }
 
     // Update isRunning based on battery voltage
+    final bool wasRunning = isRunning;
     isRunning = vb > 0.0;
 
     if (json.containsKey('mock_status')) {
@@ -65,20 +66,25 @@ class RobotState extends ChangeNotifier {
         cameraStatus = mockStatus['camera'] ?? false;
       }
     }
-    // Update video availability based on camera status and isRunning
-    // Use the setter to ensure proper state updates
-    // Now we consider video available if the robot is running and the camera key exists
-    if (isRunning) {
-      // Only update video availability if the robot is running
-      isVideoAvailable = true; // If we have camera status, video is available
+
+    // Only update video availability if the robot running state has changed
+    // or if this is the first time we're setting it
+    if (wasRunning != isRunning) {
+      _logger.info('Robot running state changed: $wasRunning -> $isRunning');
+
+      if (isRunning) {
+        // If robot just started running, set video as available
+        isVideoAvailable = true;
+      } else {
+        // If robot just stopped running, set video as unavailable
+        isVideoAvailable = false;
+      }
 
       // Debug print to help troubleshoot
       _logger.info(
           'RobotState.updateFromJson: isRunning=$isRunning, cameraStatus=$cameraStatus, isVideoAvailable=$isVideoAvailable, videoUrl=$videoUrl');
-    } else {
-      // If robot is not running, video is not available
-      isVideoAvailable = false;
     }
+
     notifyListeners();
   }
 

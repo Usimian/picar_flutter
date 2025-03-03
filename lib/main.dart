@@ -87,7 +87,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Timer? _statusTimeoutTimer;
   Timer? _videoFeedCheckTimer;
   DateTime? _lastVideoStatusUpdate;
-  bool _isVideoFeedActive = false;
   int _videoFeedFailCount = 0;
   static const int maxVideoFailCount = 3;
   double _currentSpeed = 0.0; // Add speed tracking
@@ -116,7 +115,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _setupMqttClient();
 
     // Start periodic status check which will also handle connection checks
-    _statusCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+    _statusCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (mounted) {
         if (_isMqttConnected) {
           // Request status regardless of whether robot is running or not
@@ -154,16 +153,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (_lastVideoStatusUpdate != null) {
       final timeSinceLastUpdate = now.difference(_lastVideoStatusUpdate!);
       if (timeSinceLastUpdate.inSeconds > 10) {
-        if (_isVideoFeedActive) {
+        if (RobotState.isVideoAvailable) {
           _logger.warning(
               'Video feed appears to be stopped (no status updates for ${timeSinceLastUpdate.inSeconds} seconds)');
           setState(() {
-            _isVideoFeedActive = false;
+            // Update the global state directly
+            RobotState.isVideoAvailable = false;
             _videoFeedFailCount++;
           });
-
-          // Update robot state to reflect video unavailability
-          RobotState.isVideoAvailable = false;
 
           // Try to restart video feed if failure count is below threshold
           if (_videoFeedFailCount <= maxVideoFailCount) {
@@ -192,15 +189,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _updateVideoFeedStatus(bool isActive) {
-    setState(() {
-      _isVideoFeedActive = isActive;
-      _lastVideoStatusUpdate = DateTime.now();
+    // Only update timestamp and log regardless of whether video status changes
+    _lastVideoStatusUpdate = DateTime.now();
 
-      // Reset fail count if video is active
-      if (isActive) {
+    // Reset fail count if video is active
+    if (isActive) {
+      setState(() {
         _videoFeedFailCount = 0;
-      }
-    });
+      });
+    }
+
+    // RobotState.isVideoAvailable setter already checks if value is changing
+    // so we don't need additional checks here
+    RobotState.isVideoAvailable = isActive;
+
+    // Log the update for debugging
+    _logger.info(
+        'Video feed status check: isActive=$isActive, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}');
   }
 
   void _requestRobotStatus() {
@@ -388,6 +393,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Subscribe only to status response topic
     _mqttClient.subscribe(kMqttTopicStatusResponse, MqttQos.atMostOnce);
+    _logger
+        .info('Subscribed to status response topic: $kMqttTopicStatusResponse');
 
     // Set up message handler for status updates
     _mqttClient.updates!.listen((List<MqttReceivedMessage<MqttMessage>> c) {
@@ -410,15 +417,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // 1. The robot is running (isRunning is true)
           // 2. mock_status exists in the response
           // 3. camera key exists in mock_status (regardless of its value)
-          final cameraAvailable = _robotState.isRunning &&
+          final bool cameraAvailable = _robotState.isRunning &&
               jsonResponse.containsKey('mock_status') &&
               jsonResponse['mock_status'].containsKey('camera');
 
-          _updateVideoFeedStatus(cameraAvailable);
-          _logger.info(
-              'Camera status: ${cameraAvailable ? 'Available' : 'Not Available'}, '
-              'Robot running: ${_robotState.isRunning}, '
-              'Camera key exists: ${jsonResponse.containsKey('mock_status') && jsonResponse['mock_status'].containsKey('camera')}');
+          // Check if the camera status is actually changing before updating
+          final bool currentVideoAvailable = RobotState.isVideoAvailable;
+
+          _logger.info('Camera status check: '
+              'cameraAvailable=$cameraAvailable, '
+              'currentVideoAvailable=$currentVideoAvailable, '
+              'isRunning=${_robotState.isRunning}, '
+              'hasCamera=${jsonResponse.containsKey('mock_status') && jsonResponse['mock_status'].containsKey('camera')}');
+
+          if (currentVideoAvailable != cameraAvailable) {
+            _logger.info(
+                'Camera availability changing: $currentVideoAvailable -> $cameraAvailable');
+            _updateVideoFeedStatus(cameraAvailable);
+          } else {
+            // Just update the timestamp without changing the video status
+            _lastVideoStatusUpdate = DateTime.now();
+            _logger.fine('Camera status unchanged, just updating timestamp');
+          }
         } catch (e) {
           _logger.warning('Failed to parse status response: $e');
         }

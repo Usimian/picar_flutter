@@ -86,7 +86,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
     // Debug log to help troubleshoot
     _logger.info(
-        'didChangeDependencies: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, videoUrl=${widget.videoUrl}');
+        'didChangeDependencies: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable}');
   }
 
   @override

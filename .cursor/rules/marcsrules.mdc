@@ -1,0 +1,12 @@
+---
+description: marcrules
+globs: 
+alwaysApply: false
+---
+
+# Your rule content
+
+The build system is Flutter.
+The language is Dart.
+The communications protocol is MQTT
+The runtime target is either Windows 11 or Android

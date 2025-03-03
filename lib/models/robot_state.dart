@@ -65,23 +65,12 @@ class RobotState extends ChangeNotifier {
         cameraStatus = mockStatus['camera'] ?? false;
       }
     }
-
-    // Check if the response contains a video URL
-    if (json.containsKey('video_url') && json['video_url'] is String) {
-      final newVideoUrl = json['video_url'] as String;
-      if (newVideoUrl.isNotEmpty) {
-        updateVideoUrl(newVideoUrl);
-      }
-    }
-
     // Update video availability based on camera status and isRunning
     // Use the setter to ensure proper state updates
-    // Note: cameraStatus is true for test pattern, false for real camera
-    // So we want video to be available when cameraStatus is false (real camera)
+    // Now we consider video available if the robot is running and the camera key exists
     if (isRunning) {
       // Only update video availability if the robot is running
-      isVideoAvailable =
-          !cameraStatus; // Real camera when cameraStatus is false
+      isVideoAvailable = true; // If we have camera status, video is available
 
       // Debug print to help troubleshoot
       _logger.info(
@@ -90,7 +79,6 @@ class RobotState extends ChangeNotifier {
       // If robot is not running, video is not available
       isVideoAvailable = false;
     }
-
     notifyListeners();
   }
 

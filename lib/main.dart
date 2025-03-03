@@ -23,8 +23,7 @@ void main() {
   Logger.root.level = Level.WARNING;
 
   // Set MQTT logging level
-  Logger('mqtt_client').level =
-      Level.SEVERE; // This controls the MQTT client package logging
+  Logger('mqtt_client').level = Level.SEVERE;
 
   final mainLogger = Logger('Main');
 
@@ -202,11 +201,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _videoFeedFailCount = 0;
       }
     });
-
-    // Update robot state to reflect video availability
-    _logger.info('Setting video availability to: $isActive');
-    // Note: We're letting RobotState.updateFromJson handle this now
-    // RobotState.isVideoAvailable = isActive;
   }
 
   void _requestRobotStatus() {
@@ -216,7 +210,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'command': 'status',
     });
     statusBuilder.addString(statusMessage);
-
+    // Publish the message to the status request topic
     _mqttClient.publishMessage(
       kMqttTopicStatusRequest,
       MqttQos.exactlyOnce, // Using exactlyOnce to prevent duplicates
@@ -415,18 +409,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // The camera is available when:
           // 1. The robot is running (isRunning is true)
           // 2. mock_status exists in the response
-          // 3. camera exists in mock_status
-          // 4. camera is false (indicating real camera, not test pattern)
+          // 3. camera key exists in mock_status (regardless of its value)
           final cameraAvailable = _robotState.isRunning &&
               jsonResponse.containsKey('mock_status') &&
-              jsonResponse['mock_status'].containsKey('camera') &&
-              !(jsonResponse['mock_status']['camera'] ?? true);
+              jsonResponse['mock_status'].containsKey('camera');
 
           _updateVideoFeedStatus(cameraAvailable);
           _logger.info(
               'Camera status: ${cameraAvailable ? 'Available' : 'Not Available'}, '
               'Robot running: ${_robotState.isRunning}, '
-              'Camera test pattern: ${_robotState.cameraStatus}');
+              'Camera key exists: ${jsonResponse.containsKey('mock_status') && jsonResponse['mock_status'].containsKey('camera')}');
         } catch (e) {
           _logger.warning('Failed to parse status response: $e');
         }
@@ -587,33 +579,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(8.0),
             child: Consumer<RobotState>(
               builder: (context, robotState, child) {
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Video URL: ${RobotState.videoUrl}',
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                    const SizedBox(width: 8),
-                    // Add a button to manually test the video connection
-                    ElevatedButton(
-                      onPressed: () {
-                        // Force video availability to true for testing
-                        RobotState.isVideoAvailable = true;
-                        _logger.info(
-                            'Manually set video availability to true for testing');
-
-                        // Show a snackbar to confirm
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Testing video connection...'),
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: const Text('Test Video'),
-                    ),
-                  ],
+                return Text(
+                  'Video URL: ${RobotState.videoUrl}',
+                  style: const TextStyle(fontSize: 14),
                 );
               },
             ),

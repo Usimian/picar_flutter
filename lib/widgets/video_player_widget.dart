@@ -55,11 +55,15 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   bool _needsRebuild = false;
   Timer? _rebuildDebounceTimer;
 
+  // Track the last time we forced a reconnection to prevent excessive reconnections
+  static DateTime? _lastReconnectionTime;
+
   @override
   void initState() {
     super.initState();
     // Create a persistent key for the Mjpeg widget that won't change on rebuilds
-    _streamKey = UniqueKey();
+    _streamKey = GlobalKey();
+    _logger.info('Initialized video player with persistent stream key');
 
     _startRetryTimer();
     _startFrameCheckTimer();
@@ -77,6 +81,14 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+
+    // Only check for changes if we haven't already requested a rebuild
+    if (_needsRebuild) {
+      _logger.fine(
+          'didChangeDependencies: Skipping because _needsRebuild is true');
+      return;
+    }
+
     // Get the current robot running state
     final robotRunning =
         Provider.of<RobotState>(context, listen: false).isRunning;
@@ -91,12 +103,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
     // Only update if there's an actual change in connection status
     if (_isConnected != videoAvailable) {
-      _logger.info(
+      _logger.warning(
           'Connection status changing in didChangeDependencies: $_isConnected -> $videoAvailable');
-      _isConnected = videoAvailable;
 
-      // Only request a rebuild, don't force a stream reconnection here
-      _requestRebuild();
+      // Update the connection status but don't trigger an immediate rebuild
+      // Let the debounce timer handle the rebuild
+      _isConnected = videoAvailable;
+      _needsRebuild = true;
     }
   }
 
@@ -115,12 +128,13 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
     // Create a periodic check, but only rebuild when needed
     _rebuildDebounceTimer =
-        Timer.periodic(const Duration(milliseconds: 250), (timer) {
+        Timer.periodic(const Duration(milliseconds: 1000), (timer) {
       // Only process if the widget is still mounted
       if (!mounted) return;
 
       // Check if we need to rebuild due to an explicit request
       if (_needsRebuild) {
+        _logger.info('Rebuilding due to explicit _needsRebuild flag');
         setState(() {
           _needsRebuild = false;
         });
@@ -135,8 +149,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
       // Only update if there's an actual change in connection status
       if (_isConnected != videoAvailable) {
-        _logger.info(
-            'Connection status changed in debounce timer: $_isConnected -> $videoAvailable');
+        _logger.warning(
+            'Connection status changed in debounce timer: $_isConnected -> $videoAvailable, robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}');
 
         // Don't reset the stream key here - that should only happen in retry logic
         // Just update the connection status
@@ -156,8 +170,20 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void _startRetryTimer() {
     _retryTimer?.cancel();
     _retryTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
-      if (!_isConnected && mounted && _retryCount < maxRetries) {
-        _logger.info('Retry attempt $_retryCount/$maxRetries');
+      // Only process if the widget is still mounted
+      if (!mounted) return;
+
+      // Check if we've received frames recently - if so, we're actually connected
+      final bool receivingFrames = _lastFrameTimestamp != null &&
+          DateTime.now().difference(_lastFrameTimestamp!).inSeconds < 3;
+
+      // Only attempt reconnection if:
+      // 1. We're not connected according to our state
+      // 2. We haven't reached max retries
+      // 3. We're not receiving frames (which would indicate we're actually connected)
+      if (!_isConnected && _retryCount < maxRetries && !receivingFrames) {
+        _logger.warning(
+            'Retry attempt $_retryCount/$maxRetries - isConnected=$_isConnected, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, receivingFrames=$receivingFrames');
 
         // Only request a rebuild, don't force reconnection yet
         _requestRebuild();
@@ -165,6 +191,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         // Only reset the stream key if we're actually trying to reconnect
         // after a disconnection, not during normal operation
         if (_retryCount > 0 || !RobotState.isVideoAvailable) {
+          _logger.warning(
+              'Forcing stream reconnection during retry attempt $_retryCount');
           _forceStreamReconnection();
         } else {
           _logger.info(
@@ -190,6 +218,10 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       } else if (_isConnected) {
         // If we're connected, log that we're skipping retry
         _logger.fine('Already connected, skipping retry');
+      } else if (receivingFrames) {
+        // If we're receiving frames, we're actually connected
+        _logger.info('Receiving frames, updating _isConnected to true');
+        _isConnected = true;
       }
     });
   }
@@ -205,7 +237,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       final robotRunning =
           Provider.of<RobotState>(context, listen: false).isRunning;
 
-      // Only check for video stalls if the robot is running
+      // Only check for video stalls if the robot is running and we think we're connected
       if (_isConnected && _lastFrameTimestamp != null && robotRunning) {
         final now = DateTime.now();
         final timeSinceLastFrame = now.difference(_lastFrameTimestamp!);
@@ -213,6 +245,12 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         // Also check video stalled status in RobotState
         final isStalled =
             RobotState.checkVideoStalled(stallThreshold: stallThreshold);
+
+        // Log frame check status periodically
+        if (_debugVerboseLogging || timeSinceLastFrame > Duration(seconds: 1)) {
+          _logger.fine(
+              'Frame check: timeSinceLastFrame=${timeSinceLastFrame.inMilliseconds}ms, isStalled=$isStalled, _isVideoStalled=$_isVideoStalled');
+        }
 
         // Only update state if there's an actual change in stall status
         if ((timeSinceLastFrame > stallThreshold || isStalled) &&
@@ -225,17 +263,31 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
           // Update robot state to reflect video unavailability
           // Only update if we're the first to detect the issue
           if (RobotState.isVideoAvailable) {
+            _logger.warning(
+                'Setting RobotState.isVideoAvailable to false due to stall');
             RobotState.isVideoAvailable = false;
           }
 
           // Only reset the stream key if we've detected a stall for a significant time
+          // AND we haven't forced a reconnection recently
           if (timeSinceLastFrame >
-              Duration(milliseconds: stallThreshold.inMilliseconds * 2)) {
+                  Duration(milliseconds: stallThreshold.inMilliseconds * 2) &&
+              (_lastReconnectionTime == null ||
+                  now.difference(_lastReconnectionTime!).inSeconds > 10)) {
             _logger.warning(
                 'Stall persisted for ${timeSinceLastFrame.inSeconds}s, forcing stream reconnection');
             _forceStreamReconnection();
+          } else {
+            _logger.info(
+                'Not forcing reconnection yet - waiting for stall to persist or for cooldown period');
           }
         }
+      } else if (!robotRunning && _isConnected) {
+        // If the robot is not running but we think we're connected, update our state
+        _logger
+            .info('Robot not running but _isConnected=true, updating to false');
+        _isConnected = false;
+        _requestRebuild();
       }
     });
   }
@@ -244,9 +296,19 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   void _updateFrameTimestamp() {
     final now = DateTime.now();
 
+    // Calculate time since last frame if available
+    final int msSinceLastFrame = _lastFrameTimestamp != null
+        ? now.difference(_lastFrameTimestamp!).inMilliseconds
+        : 0;
+
     // Increase threshold to reduce sensitivity (from 100ms to 250ms)
-    if (_lastFrameTimestamp == null ||
-        now.difference(_lastFrameTimestamp!).inMilliseconds > 250) {
+    if (_lastFrameTimestamp == null || msSinceLastFrame > 250) {
+      // Log frame received, but only occasionally to avoid log spam
+      if (_lastFrameTimestamp == null || msSinceLastFrame > 1000) {
+        _logger.fine(
+            'Frame received after ${msSinceLastFrame}ms, _isVideoStalled=$_isVideoStalled');
+      }
+
       _lastFrameTimestamp = now;
 
       // Also update the frame timestamp in RobotState
@@ -255,6 +317,7 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       // Only request a rebuild if the stalled state is changing
       if (_isVideoStalled) {
         _isVideoStalled = false;
+        _logger.info('Video stall resolved - received new frame');
 
         // Only request a rebuild if the stalled state changed
         _requestRebuild();
@@ -262,6 +325,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         // Update robot state to reflect video availability
         // Only update if we're the first to detect recovery
         if (!RobotState.isVideoAvailable) {
+          _logger.info(
+              'Setting RobotState.isVideoAvailable to true after stall recovery');
           RobotState.isVideoAvailable = true;
         }
       }
@@ -291,25 +356,61 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   // Method to force a reconnection of the video stream
   void _forceStreamReconnection() {
-    _logger.warning('Forcing stream reconnection with new stream key');
-    setState(() {
-      _streamKey = UniqueKey(); // Create a new key to force widget recreation
-    });
+    _logger.warning(
+        'Forcing stream reconnection with new stream key - CALLED FROM: ${StackTrace.current}');
+
+    final now = DateTime.now();
+
+    // Only allow reconnection if it's been at least 5 seconds since the last one
+    if (_lastReconnectionTime != null &&
+        now.difference(_lastReconnectionTime!).inSeconds < 5) {
+      _logger
+          .warning('Skipping reconnection - too soon since last reconnection');
+      return;
+    }
+
+    // Check if we've received frames recently - if so, don't reconnect
+    if (_lastFrameTimestamp != null &&
+        now.difference(_lastFrameTimestamp!).inSeconds < 2) {
+      _logger
+          .warning('Skipping reconnection - frames are still being received');
+      return;
+    }
+
+    // Only force reconnection if we're not already in the process of reconnecting
+    if (mounted) {
+      setState(() {
+        // Create a new key to force widget recreation
+        final oldKey = _streamKey;
+        _streamKey = UniqueKey();
+        _lastReconnectionTime = now;
+        _logger.warning(
+            'Stream key reset to force reconnection: $oldKey -> $_streamKey');
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Add a check to see if we're being rebuilt unnecessarily
+    _logger.warning(
+        'VideoPlayerWidget.build called - STACK TRACE: ${StackTrace.current}');
+
     // Use local variables to prevent rebuilds due to state changes during build
     final robotRunning =
         Provider.of<RobotState>(context, listen: false).isRunning;
     final bool videoAvailable = robotRunning && RobotState.isVideoAvailable;
     final bool localIsConnected = _isConnected;
     final bool localIsStalled = _isVideoStalled;
+    final Key currentStreamKey = _streamKey;
 
     // Debug log to help troubleshoot - only log when verbose logging is enabled
     if (_debugVerboseLogging) {
       _logger.info(
           'build: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, localIsConnected=$localIsConnected, videoUrl=${widget.videoUrl}');
+    } else {
+      // Always log the stream key to help track when it changes
+      _logger.info('build: using stream key: $currentStreamKey');
     }
 
     // Always attempt to show the video feed if the robot is running
@@ -365,6 +466,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
       );
     }
 
+    // Create a widget that will persist across rebuilds
+    // Use RepaintBoundary to prevent unnecessary repaints
     return Container(
       width: 320, // Fixed width
       height: 240, // Fixed height
@@ -379,8 +482,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         children: [
           // Use a RepaintBoundary to prevent unnecessary repaints
           RepaintBoundary(
+            // Use ValueKey instead of UniqueKey to maintain the same key across rebuilds
+            // Only change the key when _streamKey changes (forced reconnection)
             child: Mjpeg(
-              // Only use the stream key for forcing reconnection, not for normal rebuilds
               key: _streamKey,
               isLive: true,
               stream: videoUrl,
@@ -432,5 +536,51 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
         ],
       ),
     );
+  }
+
+  // Override the updateShouldNotify method to prevent unnecessary rebuilds
+  @override
+  void didUpdateWidget(VideoPlayerWidget oldWidget) {
+    // Only call super.didUpdateWidget if the video URL has actually changed
+    if (oldWidget.videoUrl != widget.videoUrl) {
+      _logger.warning(
+          'Video URL changed: ${oldWidget.videoUrl} -> ${widget.videoUrl}');
+      super.didUpdateWidget(oldWidget);
+    } else {
+      _logger.fine('Skipping didUpdateWidget - video URL unchanged');
+    }
+  }
+}
+
+class VideoFeedContainer extends StatefulWidget {
+  const VideoFeedContainer({super.key});
+
+  @override
+  State<VideoFeedContainer> createState() => _VideoFeedContainerState();
+}
+
+class _VideoFeedContainerState extends State<VideoFeedContainer> {
+  // Use a GlobalKey to preserve the VideoPlayerWidget instance across rebuilds
+  final GlobalKey<_VideoPlayerWidgetState> _videoPlayerKey =
+      GlobalKey<_VideoPlayerWidgetState>();
+
+  // Create the VideoPlayerWidget once and reuse it
+  late final VideoPlayerWidget _videoPlayer;
+
+  @override
+  void initState() {
+    super.initState();
+    // Create the VideoPlayerWidget once in initState
+    _videoPlayer = VideoPlayerWidget(
+      key: _videoPlayerKey,
+      videoUrl: RobotState.videoUrl,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Simply return the pre-created VideoPlayerWidget
+    // This won't create a new instance on rebuilds
+    return _videoPlayer;
   }
 }

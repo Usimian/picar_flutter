@@ -85,7 +85,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isMqttConnected = false;
   Timer? _statusCheckTimer;
   Timer? _statusTimeoutTimer;
-  Timer? _videoFeedCheckTimer;
   double _currentSpeed = 0.0; // Add speed tracking
   double _currentTurn = 0.0; // Add turn tracking
   double _currentPan = 0.0; // Add pan tracking
@@ -350,6 +349,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               'currentVideoAvailable=$currentVideoAvailable, '
               'isRunning=${_robotState.isRunning}, '
               'hasCamera=${jsonResponse.containsKey('mock_status') && jsonResponse['mock_status'].containsKey('camera')}');
+
+          // Only update isVideoAvailable if there's an actual change
+          if (cameraAvailable != currentVideoAvailable) {
+            _logger.info(
+                'Updating video availability: $currentVideoAvailable -> $cameraAvailable');
+            RobotState.isVideoAvailable = cameraAvailable;
+          }
         } catch (e) {
           _logger.warning('Failed to parse status response: $e');
         }
@@ -361,7 +367,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void dispose() {
     _statusCheckTimer?.cancel();
     _statusTimeoutTimer?.cancel();
-    _videoFeedCheckTimer?.cancel();
     _mqttClient.disconnect();
     super.dispose();
   }
@@ -631,9 +636,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(8),
                             child: robotState.isRunning
-                                ? VideoPlayerWidget(
-                                    videoUrl: RobotState.videoUrl,
-                                  )
+                                ? const VideoFeedContainer()
                                 : Center(
                                     child: Column(
                                       mainAxisAlignment:

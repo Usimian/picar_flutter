@@ -72,13 +72,9 @@ class RobotState extends ChangeNotifier {
     if (wasRunning != isRunning) {
       _logger.info('Robot running state changed: $wasRunning -> $isRunning');
 
-      if (isRunning) {
-        // If robot just started running, set video as available
-        isVideoAvailable = true;
-      } else {
-        // If robot just stopped running, set video as unavailable
-        isVideoAvailable = false;
-      }
+      // REMOVE automatic video availability updates based on running state
+      // Let the main.dart status handler control this instead
+      // This prevents unnecessary updates during status checks
 
       // Debug print to help troubleshoot
       _logger.info(
@@ -122,7 +118,7 @@ class RobotState extends ChangeNotifier {
   }
 
   Color getBatteryColor() {
-    if (vb <= 7.15) {
+    if (vb <= 7.5) {
       return const Color.fromARGB(255, 255, 17, 0);
     } else if (vb <= 7.4) {
       return const Color.fromARGB(255, 255, 255, 0);

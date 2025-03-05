@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
+import '../utils/app_colors.dart';
 
 class RobotState extends ChangeNotifier {
   // Create a logger instance for this class
   static final Logger _logger = Logger('RobotState');
+
+  // Cache for battery color to avoid recreating it on every call
+  Color? _batteryColorCache;
+  double _lastVbForColorCache = -1;
 
   // Change from static const to static String to allow updates
   static String videoUrl = "http://192.168.1.167:9000/mjpg";
@@ -28,8 +33,10 @@ class RobotState extends ChangeNotifier {
     }
   }
 
+  // Use a more efficient approach for video frame time tracking
   static DateTime? lastVideoFrameTime;
   static bool isVideoStalled = false;
+  static int _lastFrameCheckMs = 0;
 
   double pos = 0.0;
   double vb = 0.0;
@@ -45,66 +52,129 @@ class RobotState extends ChangeNotifier {
   bool adcStatus = false;
   bool cameraStatus = false; // true means test pattern, false means real camera
 
+  // Track if state has actually changed to avoid unnecessary notifications
+  bool _hasStateChanged = false;
+
   void updateFromJson(Map<String, dynamic> json) {
-    if (json.containsKey('Vb')) vb = json['Vb']?.toDouble() ?? 0.0;
+    _hasStateChanged = false;
+
+    // Update battery voltage if changed
+    if (json.containsKey('Vb')) {
+      final newVb = json['Vb']?.toDouble() ?? 0.0;
+      if (vb != newVb) {
+        vb = newVb;
+        _hasStateChanged = true;
+        // Invalidate battery color cache when voltage changes
+        _batteryColorCache = null;
+      }
+    }
+
+    // Update distance if changed
     if (json.containsKey('distance')) {
-      distance = json['distance']?.toDouble() ?? 0.0;
+      final newDistance = json['distance']?.toDouble() ?? 0.0;
+      if (distance != newDistance) {
+        distance = newDistance;
+        _hasStateChanged = true;
+      }
+    }
+
+    // Update position if present
+    if (json.containsKey('pos')) {
+      final newPos = json['pos']?.toDouble() ?? 0.0;
+      if (pos != newPos) {
+        pos = newPos;
+        _hasStateChanged = true;
+      }
     }
 
     // Update isRunning based on battery voltage
     final bool wasRunning = isRunning;
-    isRunning = vb > 0.0;
+    final bool newRunningState = vb > 0.0;
+    if (isRunning != newRunningState) {
+      isRunning = newRunningState;
+      _hasStateChanged = true;
+    }
 
+    // Batch update status flags
     if (json.containsKey('mock_status')) {
       final mockStatus = json['mock_status'] as Map<String, dynamic>;
+
+      // Update GPIO status if changed
       if (mockStatus.containsKey('gpio')) {
-        gpioStatus = mockStatus['gpio'] ?? false;
+        final newGpioStatus = mockStatus['gpio'] ?? false;
+        if (gpioStatus != newGpioStatus) {
+          gpioStatus = newGpioStatus;
+          _hasStateChanged = true;
+        }
       }
-      if (mockStatus.containsKey('i2c')) i2cStatus = mockStatus['i2c'] ?? false;
-      if (mockStatus.containsKey('adc')) adcStatus = mockStatus['adc'] ?? false;
+
+      // Update I2C status if changed
+      if (mockStatus.containsKey('i2c')) {
+        final newI2cStatus = mockStatus['i2c'] ?? false;
+        if (i2cStatus != newI2cStatus) {
+          i2cStatus = newI2cStatus;
+          _hasStateChanged = true;
+        }
+      }
+
+      // Update ADC status if changed
+      if (mockStatus.containsKey('adc')) {
+        final newAdcStatus = mockStatus['adc'] ?? false;
+        if (adcStatus != newAdcStatus) {
+          adcStatus = newAdcStatus;
+          _hasStateChanged = true;
+        }
+      }
+
+      // Update camera status if changed
       if (mockStatus.containsKey('camera')) {
-        cameraStatus = mockStatus['camera'] ?? false;
+        final newCameraStatus = mockStatus['camera'] ?? false;
+        if (cameraStatus != newCameraStatus) {
+          cameraStatus = newCameraStatus;
+          _hasStateChanged = true;
+        }
       }
     }
 
-    // Only update video availability if the robot running state has changed
-    // or if this is the first time we're setting it
+    // Only log if running state changed
     if (wasRunning != isRunning) {
       _logger.info('Robot running state changed: $wasRunning -> $isRunning');
-
-      // REMOVE automatic video availability updates based on running state
-      // Let the main.dart status handler control this instead
-      // This prevents unnecessary updates during status checks
-
-      // Debug print to help troubleshoot
       _logger.info(
           'RobotState.updateFromJson: isRunning=$isRunning, cameraStatus=$cameraStatus, isVideoAvailable=$isVideoAvailable, videoUrl=$videoUrl');
     }
 
-    notifyListeners();
-  }
-
-  // Method to update video frame timestamp
-  static void updateVideoFrameTime() {
-    // Only update if a significant amount of time has passed since the last update
-    // or if this is the first update
-    final now = DateTime.now();
-    if (lastVideoFrameTime == null ||
-        now.difference(lastVideoFrameTime!).inMilliseconds > 100) {
-      lastVideoFrameTime = now;
-      isVideoStalled = false;
+    // Only notify listeners if something actually changed
+    if (_hasStateChanged) {
+      notifyListeners();
     }
   }
 
-  // Method to check if video feed is stalled
+  // Optimized method to update video frame timestamp
+  static void updateVideoFrameTime() {
+    final now = DateTime.now();
+    final currentTimeMs = now.millisecondsSinceEpoch;
+
+    // Only update if at least 100ms have passed since last update
+    // This reduces the number of DateTime objects created
+    if (lastVideoFrameTime == null || currentTimeMs - _lastFrameCheckMs > 100) {
+      lastVideoFrameTime = now;
+      isVideoStalled = false;
+      _lastFrameCheckMs = currentTimeMs;
+    }
+  }
+
+  // Optimized method to check if video feed is stalled
   static bool checkVideoStalled(
       {Duration stallThreshold = const Duration(seconds: 5)}) {
     if (lastVideoFrameTime == null) {
       return true; // No frames received yet
     }
 
-    final timeSinceLastFrame = DateTime.now().difference(lastVideoFrameTime!);
-    if (timeSinceLastFrame > stallThreshold) {
+    final currentTimeMs = DateTime.now().millisecondsSinceEpoch;
+    final lastFrameMs = lastVideoFrameTime!.millisecondsSinceEpoch;
+    final stallThresholdMs = stallThreshold.inMilliseconds;
+
+    if (currentTimeMs - lastFrameMs > stallThresholdMs) {
       isVideoStalled = true;
       return true;
     }
@@ -113,17 +183,32 @@ class RobotState extends ChangeNotifier {
   }
 
   void setTargetPosition(double newPosition) {
-    targetPosition = newPosition;
-    notifyListeners();
+    if (targetPosition != newPosition) {
+      targetPosition = newPosition;
+      notifyListeners();
+    }
   }
 
   Color getBatteryColor() {
-    if (vb <= 7.5) {
-      return const Color.fromARGB(255, 255, 17, 0);
-    } else if (vb <= 7.4) {
-      return const Color.fromARGB(255, 255, 255, 0);
-    } else {
-      return const Color.fromARGB(255, 0, 255, 0);
+    // Return cached color if voltage hasn't changed
+    if (_batteryColorCache != null && _lastVbForColorCache == vb) {
+      return _batteryColorCache!;
     }
+
+    // Calculate new color
+    Color color;
+    if (vb <= 7.5) {
+      color = AppColors.batteryLow;
+    } else if (vb <= 7.4) {
+      color = AppColors.batteryMedium;
+    } else {
+      color = AppColors.batteryGood;
+    }
+
+    // Cache the result
+    _batteryColorCache = color;
+    _lastVbForColorCache = vb;
+
+    return color;
   }
 }

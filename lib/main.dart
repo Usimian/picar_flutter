@@ -9,6 +9,7 @@ import 'dart:async';
 import 'dart:convert'; // Import the dart:convert library
 import 'models/robot_state.dart';
 import 'widgets/position_control.dart';
+import 'utils/app_colors.dart';
 
 // MQTT Topics
 const String kMqttTopicControlRequest = 'picar/control_request';
@@ -20,7 +21,7 @@ const String kMqttTopicStatusResponse =
 void main() {
   // Set up logging
   hierarchicalLoggingEnabled = true; // Enable per-logger levels
-  Logger.root.level = Level.WARNING;
+  Logger.root.level = Level.WARNING; // Logging level for application
 
   // Set MQTT logging level
   Logger('mqtt_client').level = Level.SEVERE;
@@ -90,12 +91,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _currentPan = 0.0; // Add pan tracking
   double _currentTilt = 0.0; // Add tilt tracking
 
+  // Cache payload builders to avoid recreating them
+  final _statusPayloadBuilder = MqttClientPayloadBuilder();
+  final _drivePayloadBuilder = MqttClientPayloadBuilder();
+  final _cameraPayloadBuilder = MqttClientPayloadBuilder();
+
+  // Debounce timers for joystick controls
+  Timer? _driveDebounceTimer;
+  Timer? _cameraDebounceTimer;
+
+  // Last sent values to avoid duplicate messages
+  double? _lastSentSpeed;
+  double? _lastSentTurn;
+  double? _lastSentPan;
+  double? _lastSentTilt;
+
   @override
   void initState() {
     super.initState();
 
     // Set logger level but don't add another listener
-    Logger.root.level = Level.ALL;
+    Logger.root.level = Level.INFO;
 
     _logger.info('Dashboard initializing...');
 
@@ -129,17 +145,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _requestRobotStatus() {
-    // Create a single message with all required status information
-    final statusBuilder = MqttClientPayloadBuilder();
+    // Reuse the payload builder instead of creating a new one each time
+    _statusPayloadBuilder.clear();
     final statusMessage = jsonEncode({
       'command': 'status',
     });
-    statusBuilder.addString(statusMessage);
+    _statusPayloadBuilder.addString(statusMessage);
+
     // Publish the message to the status request topic
     _mqttClient.publishMessage(
       kMqttTopicStatusRequest,
       MqttQos.exactlyOnce, // Using exactlyOnce to prevent duplicates
-      statusBuilder.payload!,
+      _statusPayloadBuilder.payload!,
     );
 
     // Cancel any existing timeout timer
@@ -344,7 +361,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // Check if the camera status is actually changing before updating
           final bool currentVideoAvailable = RobotState.isVideoAvailable;
 
-          _logger.info('Camera status check: '
+          _logger.fine('Camera status check: '
               'cameraAvailable=$cameraAvailable, '
               'currentVideoAvailable=$currentVideoAvailable, '
               'isRunning=${_robotState.isRunning}, '
@@ -363,10 +380,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  // Optimized method to publish drive control updates with debouncing
+  void _publishDriveControl(double speed, double turn) {
+    // Skip if values haven't changed significantly or MQTT is disconnected
+    if ((_lastSentSpeed != null &&
+            _lastSentTurn != null &&
+            (speed - _lastSentSpeed!).abs() < 0.01 &&
+            (turn - _lastSentTurn!).abs() < 0.01) ||
+        _mqttClient.connectionStatus?.state != MqttConnectionState.connected) {
+      return;
+    }
+
+    _driveDebounceTimer?.cancel();
+    _driveDebounceTimer = Timer(const Duration(milliseconds: 50), () {
+      _lastSentSpeed = speed;
+      _lastSentTurn = turn;
+
+      _drivePayloadBuilder.clear();
+      _drivePayloadBuilder.addString(
+          '{"turn": ${turn.toStringAsFixed(2)}, "speed": ${speed.toStringAsFixed(2)}}');
+
+      _mqttClient.publishMessage(
+        'picar/control_request',
+        MqttQos.exactlyOnce,
+        _drivePayloadBuilder.payload!,
+      );
+    });
+  }
+
+  // Optimized method to publish camera control updates with debouncing
+  void _publishCameraControl(double pan, double tilt) {
+    // Skip if values haven't changed significantly or MQTT is disconnected
+    if ((_lastSentPan != null &&
+            _lastSentTilt != null &&
+            (pan - _lastSentPan!).abs() < 0.01 &&
+            (tilt - _lastSentTilt!).abs() < 0.01) ||
+        _mqttClient.connectionStatus?.state != MqttConnectionState.connected) {
+      return;
+    }
+
+    _cameraDebounceTimer?.cancel();
+    _cameraDebounceTimer = Timer(const Duration(milliseconds: 50), () {
+      _lastSentPan = pan;
+      _lastSentTilt = tilt;
+
+      _cameraPayloadBuilder.clear();
+      final controlMessage = {'tilt': tilt * 90, 'pan': pan * 90};
+
+      _cameraPayloadBuilder.addString(json.encode(controlMessage));
+      _mqttClient.publishMessage(
+        kMqttTopicControlRequest,
+        MqttQos.exactlyOnce,
+        _cameraPayloadBuilder.payload!,
+      );
+    });
+  }
+
   @override
   void dispose() {
     _statusCheckTimer?.cancel();
     _statusTimeoutTimer?.cancel();
+    _driveDebounceTimer?.cancel();
+    _cameraDebounceTimer?.cancel();
     _mqttClient.disconnect();
     super.dispose();
   }
@@ -402,13 +477,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     return Icon(
                       Icons.car_repair,
                       color: !robotState.isRunning
-                          ? const Color.fromARGB(
-                              255, 255, 0, 0) // Red when not running
+                          ? AppColors.statusRed // Red when not running
                           : robotState.gpioStatus
-                              ? const Color.fromARGB(
-                                  255, 0, 0, 255) // Blue when running and true
-                              : const Color.fromARGB(255, 0, 255,
-                                  8), // Green when running and false
+                              ? AppColors
+                                  .statusBlue // Blue when running and true
+                              : AppColors
+                                  .statusGreen, // Green when running and false
                       size: 24,
                     );
                   },
@@ -423,10 +497,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     return Icon(
                       Icons.cable,
                       color: !robotState.isRunning
-                          ? const Color.fromARGB(255, 255, 0, 0)
+                          ? AppColors.statusRed
                           : robotState.i2cStatus
-                              ? const Color.fromARGB(255, 0, 0, 255)
-                              : const Color.fromARGB(255, 0, 255, 8),
+                              ? AppColors.statusBlue
+                              : AppColors.statusGreen,
                       size: 24,
                     );
                   },
@@ -441,10 +515,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     return Icon(
                       Icons.memory,
                       color: !robotState.isRunning
-                          ? const Color.fromARGB(255, 255, 0, 0)
+                          ? AppColors.statusRed
                           : robotState.adcStatus
-                              ? const Color.fromARGB(255, 0, 0, 255)
-                              : const Color.fromARGB(255, 0, 255, 8),
+                              ? AppColors.statusBlue
+                              : AppColors.statusGreen,
                       size: 24,
                     );
                   },
@@ -459,12 +533,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     return Icon(
                       Icons.camera_alt,
                       color: !robotState.isRunning
-                          ? const Color.fromARGB(255, 255, 0, 0)
+                          ? AppColors.statusRed
                           : robotState.cameraStatus
-                              ? const Color.fromARGB(255, 0, 0,
-                                  255) // Blue when using test pattern
-                              : const Color.fromARGB(255, 0, 255,
-                                  8), // Green when using real camera
+                              ? AppColors
+                                  .statusBlue // Blue when using test pattern
+                              : AppColors
+                                  .statusGreen, // Green when using real camera
                       size: 24,
                     );
                   },
@@ -477,8 +551,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Icon(
                   Icons.connect_without_contact,
                   color: _isMqttConnected
-                      ? const Color.fromARGB(255, 0, 255, 8)
-                      : const Color.fromARGB(255, 255, 17, 0),
+                      ? AppColors.connected
+                      : AppColors.disconnected,
                   size: 24,
                 ),
                 const SizedBox(width: 4),
@@ -491,8 +565,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     return Icon(
                       Icons.run_circle,
                       color: robotState.isRunning
-                          ? const Color.fromARGB(255, 0, 255, 8)
-                          : const Color.fromARGB(255, 255, 0, 0),
+                          ? AppColors.statusGreen
+                          : AppColors.statusRed,
                       size: 24,
                     );
                   },
@@ -557,18 +631,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     _currentTurn = details.x;
                                   });
 
-                                  if (_mqttClient.connectionStatus?.state ==
-                                      MqttConnectionState.connected) {
-                                    final builder = MqttClientPayloadBuilder();
-                                    builder.addString(
-                                        '{"turn": ${details.x.toStringAsFixed(2)}, "speed": ${desiredSpeed.toStringAsFixed(2)}}');
-                                    _mqttClient.publishMessage(
-                                      'picar/control_request',
-                                      MqttQos
-                                          .exactlyOnce, // Changed from atLeastOnce to ensure exactly one delivery
-                                      builder.payload!,
-                                    );
-                                  }
+                                  _publishDriveControl(desiredSpeed, details.x);
                                 },
                                 base: Container(
                                   width: 150,
@@ -576,9 +639,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: robotState.distance < 10
-                                        ? Colors.red[
-                                            100] // Light red background when too close
-                                        : Colors.grey[300],
+                                        ? AppColors
+                                            .distanceBackground // Light red background when too close
+                                        : AppColors.joystickBase,
                                   ),
                                   child: Center(
                                     child: Column(
@@ -592,11 +655,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           ),
                                         ),
                                         if (robotState.distance < 10)
-                                          const Text(
+                                          Text(
                                             'TOO CLOSE!',
                                             style: TextStyle(
                                               fontSize: 12,
-                                              color: Colors.red,
+                                              color: AppColors.distanceWarning,
                                               fontWeight: FontWeight.bold,
                                             ),
                                           ),
@@ -609,7 +672,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   height: 50,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    color: Colors.grey[600],
+                                    color: AppColors.joystickStick,
                                   ),
                                 ),
                               );
@@ -630,7 +693,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           width: 320,
                           height: 240,
                           decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
+                            border: Border.all(color: AppColors.borderColor),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: ClipRRect(
@@ -643,17 +706,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           MainAxisAlignment.center,
                                       children: const [
                                         Icon(Icons.power_off,
-                                            size: 48, color: Colors.grey),
+                                            size: 48,
+                                            color: AppColors.disabledText),
                                         SizedBox(height: 8),
                                         Text(
                                           'Robot is not running',
-                                          style: TextStyle(color: Colors.grey),
+                                          style: TextStyle(
+                                              color: AppColors.disabledText),
                                         ),
                                         SizedBox(height: 4),
                                         Text(
                                           'Video feed disabled',
                                           style: TextStyle(
-                                              color: Colors.grey, fontSize: 12),
+                                              color: AppColors.disabledText,
+                                              fontSize: 12),
                                         ),
                                       ],
                                     ),
@@ -685,31 +751,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 _currentPan = details.x;
                                 _currentTilt = details.y;
                               });
-                              if (_mqttClient.connectionStatus?.state ==
-                                  MqttConnectionState.connected) {
-                                // details.x and details.y are already normalized to -1.0 to 1.0
-                                final controlMessage = {
-                                  'tilt': details.y *
-                                      90, // Invert Y axis so up is positive
-                                  'pan': details.x * 90
-                                };
 
-                                // Publish control message
-                                final builder = MqttClientPayloadBuilder();
-                                builder.addString(json.encode(controlMessage));
-                                _mqttClient.publishMessage(
-                                    kMqttTopicControlRequest,
-                                    MqttQos
-                                        .exactlyOnce, // Changed from atLeastOnce to ensure exactly one delivery
-                                    builder.payload!);
-                              }
+                              _publishCameraControl(details.x, details.y);
                             },
                             base: Container(
                               width: 150,
                               height: 150,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.grey[300],
+                                color: AppColors.joystickBase,
                               ),
                             ),
                             stick: Container(
@@ -717,7 +767,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               height: 50,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: Colors.grey[600],
+                                color: AppColors.joystickStick,
                               ),
                             ),
                           ),

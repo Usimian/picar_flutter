@@ -36,9 +36,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
   // Add logger instance
   final _logger = Logger('VideoPlayerWidget');
 
-  // Add debug flag to control verbose logging
-  static const bool _debugVerboseLogging = false;
-
   bool _isConnected = false;
   Timer? _retryTimer;
   Key _streamKey = GlobalKey();
@@ -247,10 +244,8 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
             RobotState.checkVideoStalled(stallThreshold: stallThreshold);
 
         // Log frame check status periodically
-        if (_debugVerboseLogging || timeSinceLastFrame > Duration(seconds: 1)) {
-          _logger.fine(
-              'Frame check: timeSinceLastFrame=${timeSinceLastFrame.inMilliseconds}ms, isStalled=$isStalled, _isVideoStalled=$_isVideoStalled');
-        }
+        _logger.fine(
+            'Frame check: timeSinceLastFrame=${timeSinceLastFrame.inMilliseconds}ms, isStalled=$isStalled, _isVideoStalled=$_isVideoStalled');
 
         // Only update state if there's an actual change in stall status
         if ((timeSinceLastFrame > stallThreshold || isStalled) &&
@@ -392,10 +387,6 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Add a check to see if we're being rebuilt unnecessarily
-    _logger.warning(
-        'VideoPlayerWidget.build called - STACK TRACE: ${StackTrace.current}');
-
     // Use local variables to prevent rebuilds due to state changes during build
     final robotRunning =
         Provider.of<RobotState>(context, listen: false).isRunning;
@@ -405,13 +396,9 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     final Key currentStreamKey = _streamKey;
 
     // Debug log to help troubleshoot - only log when verbose logging is enabled
-    if (_debugVerboseLogging) {
-      _logger.info(
-          'build: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, localIsConnected=$localIsConnected, videoUrl=${widget.videoUrl}');
-    } else {
-      // Always log the stream key to help track when it changes
-      _logger.info('build: using stream key: $currentStreamKey');
-    }
+    _logger.fine(
+        'build: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, localIsConnected=$localIsConnected, videoUrl=${widget.videoUrl}');
+    _logger.fine('build: using stream key: $currentStreamKey');
 
     // Always attempt to show the video feed if the robot is running
     // This is a more permissive approach that will try to connect even if isVideoAvailable is false

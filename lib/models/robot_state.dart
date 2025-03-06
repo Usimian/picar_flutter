@@ -25,6 +25,29 @@ class RobotState extends ChangeNotifier {
     }
   }
 
+  // Add video resolution properties
+  static int _videoWidth = 320; // Default width
+  static int _videoHeight = 240; // Default height
+  static bool _hasDetectedResolution = false;
+
+  // Getters and setters for video resolution
+  static int get videoWidth => _videoWidth;
+  static int get videoHeight => _videoHeight;
+  static bool get hasDetectedResolution => _hasDetectedResolution;
+
+  // Method to update video resolution
+  static void updateVideoResolution(int width, int height) {
+    if (width > 0 &&
+        height > 0 &&
+        (_videoWidth != width || _videoHeight != height)) {
+      _logger.info(
+          'Updating video resolution from ${_videoWidth}x$_videoHeight to ${width}x$height');
+      _videoWidth = width;
+      _videoHeight = height;
+      _hasDetectedResolution = true;
+    }
+  }
+
   // Add a method to update the video URL
   static void updateVideoUrl(String newUrl) {
     if (videoUrl != newUrl && newUrl.isNotEmpty) {

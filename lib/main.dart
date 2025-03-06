@@ -589,9 +589,68 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(8.0),
             child: Consumer<RobotState>(
               builder: (context, robotState, child) {
-                return Text(
-                  'Video URL: ${RobotState.videoUrl}',
-                  style: const TextStyle(fontSize: 14),
+                return SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Video URL: ${RobotState.videoUrl}',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(width: 16),
+                      Text(
+                        'Native: ${RobotState.videoWidth}x${RobotState.videoHeight}',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(width: 4),
+                      Icon(
+                        RobotState.hasDetectedResolution
+                            ? Icons.check_circle
+                            : Icons.pending,
+                        size: 16,
+                        color: RobotState.hasDetectedResolution
+                            ? Colors.green
+                            : Colors.orange,
+                      ),
+                      const SizedBox(width: 16),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Calculate the actual display size based on the video container
+                          // The video is in the middle column with flex: 2 in a Row with total flex: 4
+                          final containerWidth =
+                              MediaQuery.of(context).size.width * 0.5;
+                          final containerHeight =
+                              MediaQuery.of(context).size.height - 200;
+
+                          // Calculate the displayed size while maintaining aspect ratio
+                          final aspectRatio = RobotState.hasDetectedResolution
+                              ? RobotState.videoWidth / RobotState.videoHeight
+                              : 4.0 /
+                                  3.0; // Default 4:3 aspect ratio if not detected
+                          int displayWidth;
+                          int displayHeight;
+
+                          if (containerWidth / containerHeight > aspectRatio) {
+                            // Height constrained
+                            displayHeight = containerHeight.toInt();
+                            displayWidth =
+                                (containerHeight * aspectRatio).toInt();
+                          } else {
+                            // Width constrained
+                            displayWidth = containerWidth.toInt();
+                            displayHeight =
+                                (containerWidth / aspectRatio).toInt();
+                          }
+
+                          return Text(
+                            'Display: ${displayWidth}x$displayHeight',
+                            style: const TextStyle(fontSize: 14),
+                          );
+                        },
+                      ),
+                    ],
+                  ),
                 );
               },
             ),
@@ -690,8 +749,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Consumer<RobotState>(
                       builder: (context, robotState, child) {
                         return Container(
-                          width: 320,
-                          height: 240,
                           decoration: BoxDecoration(
                             border: Border.all(color: AppColors.borderColor),
                             borderRadius: BorderRadius.circular(8),
@@ -704,17 +761,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     child: Column(
                                       mainAxisAlignment:
                                           MainAxisAlignment.center,
-                                      children: const [
+                                      children: [
                                         Icon(Icons.power_off,
                                             size: 48,
                                             color: AppColors.disabledText),
-                                        SizedBox(height: 8),
+                                        const SizedBox(height: 8),
                                         Text(
                                           'Robot is not running',
                                           style: TextStyle(
                                               color: AppColors.disabledText),
                                         ),
-                                        SizedBox(height: 4),
+                                        const SizedBox(height: 4),
                                         Text(
                                           'Video feed disabled',
                                           style: TextStyle(

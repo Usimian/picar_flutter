@@ -1,20 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_mjpeg/flutter_mjpeg.dart';
 import 'dart:async';
+import 'dart:typed_data';
 import '../models/robot_state.dart';
 import 'package:provider/provider.dart';
 import 'package:logging/logging.dart';
+import '../utils/app_colors.dart';
+import 'package:image/image.dart' as img;
 
 // Custom preprocessor to detect frame updates
 class FrameDetectionPreprocessor extends MjpegPreprocessor {
   final Function onFrameReceived;
+  final Function(int width, int height)? onResolutionDetected;
+  bool _hasDetectedResolution = false;
+  final _logger = Logger('FrameDetectionPreprocessor');
 
-  FrameDetectionPreprocessor(this.onFrameReceived);
+  FrameDetectionPreprocessor(this.onFrameReceived, {this.onResolutionDetected});
 
   @override
   List<int>? process(List<int> frame) {
     // Call the callback when a frame is received
     onFrameReceived();
+
+    // Extract resolution from the frame if we haven't already
+    if (!_hasDetectedResolution && onResolutionDetected != null) {
+      try {
+        // Decode the JPEG image to extract its dimensions
+        final decodedImage = img.decodeJpg(Uint8List.fromList(frame));
+        if (decodedImage != null) {
+          final width = decodedImage.width;
+          final height = decodedImage.height;
+
+          _logger.info('Detected video resolution: ${width}x$height');
+
+          // Call the resolution callback with the detected dimensions
+          onResolutionDetected!(width, height);
+
+          // Mark that we've detected the resolution to avoid unnecessary processing
+          _hasDetectedResolution = true;
+        }
+      } catch (e) {
+        _logger.warning('Error extracting resolution from frame: $e');
+      }
+    }
+
     // Return the original frame
     return frame;
   }
@@ -54,6 +83,14 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
 
   // Track the last time we forced a reconnection to prevent excessive reconnections
   static DateTime? _lastReconnectionTime;
+
+  // Video dimensions - default to 4:3 aspect ratio (320x240)
+  double _videoWidth = 320;
+  double _videoHeight = 240;
+  bool _hasReceivedFirstFrame = false;
+
+  // Add a flag to track if we've detected the actual resolution
+  bool _hasDetectedActualResolution = false;
 
   @override
   void initState() {
@@ -287,44 +324,45 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     });
   }
 
-  // Add method to update frame timestamp
+  // Method to update frame timestamp and detect video dimensions
   void _updateFrameTimestamp() {
     final now = DateTime.now();
+    _lastFrameTimestamp = now;
 
-    // Calculate time since last frame if available
-    final int msSinceLastFrame = _lastFrameTimestamp != null
-        ? now.difference(_lastFrameTimestamp!).inMilliseconds
-        : 0;
+    // Update the global timestamp in RobotState
+    RobotState.updateVideoFrameTime();
 
-    // Increase threshold to reduce sensitivity (from 100ms to 250ms)
-    if (_lastFrameTimestamp == null || msSinceLastFrame > 250) {
-      // Log frame received, but only occasionally to avoid log spam
-      if (_lastFrameTimestamp == null || msSinceLastFrame > 1000) {
-        _logger.fine(
-            'Frame received after ${msSinceLastFrame}ms, _isVideoStalled=$_isVideoStalled');
-      }
-
-      _lastFrameTimestamp = now;
-
-      // Also update the frame timestamp in RobotState
-      RobotState.updateVideoFrameTime();
-
-      // Only request a rebuild if the stalled state is changing
-      if (_isVideoStalled) {
+    // Reset stalled state if it was stalled
+    if (_isVideoStalled) {
+      setState(() {
         _isVideoStalled = false;
-        _logger.info('Video stall resolved - received new frame');
+      });
+    }
 
-        // Only request a rebuild if the stalled state changed
-        _requestRebuild();
+    // Mark that we've received at least one frame
+    if (!_hasReceivedFirstFrame) {
+      _hasReceivedFirstFrame = true;
+      _logger.info('Received first video frame');
+    }
+  }
 
-        // Update robot state to reflect video availability
-        // Only update if we're the first to detect recovery
-        if (!RobotState.isVideoAvailable) {
-          _logger.info(
-              'Setting RobotState.isVideoAvailable to true after stall recovery');
-          RobotState.isVideoAvailable = true;
-        }
-      }
+  // Method to handle resolution detection
+  void _handleResolutionDetected(int width, int height) {
+    _logger.info('Resolution detected: ${width}x$height');
+
+    // Only update if the resolution is valid and different from current
+    if (width > 0 &&
+        height > 0 &&
+        (_videoWidth != width.toDouble() ||
+            _videoHeight != height.toDouble())) {
+      setState(() {
+        _videoWidth = width.toDouble();
+        _videoHeight = height.toDouble();
+        _hasDetectedActualResolution = true;
+      });
+
+      // Update RobotState with the detected resolution
+      RobotState.updateVideoResolution(width, height);
     }
   }
 
@@ -395,34 +433,29 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     final bool localIsStalled = _isVideoStalled;
     final Key currentStreamKey = _streamKey;
 
+    // Use resolution from RobotState if available, otherwise use local values
+    final double displayWidth = RobotState.hasDetectedResolution
+        ? RobotState.videoWidth.toDouble()
+        : _videoWidth;
+    final double displayHeight = RobotState.hasDetectedResolution
+        ? RobotState.videoHeight.toDouble()
+        : _videoHeight;
+
     // Debug log to help troubleshoot - only log when verbose logging is enabled
+    _logger.warning(
+        'VideoPlayerWidget.build called - STACK TRACE: ${StackTrace.current}');
     _logger.fine(
         'build: robotRunning=$robotRunning, RobotState.isVideoAvailable=${RobotState.isVideoAvailable}, videoAvailable=$videoAvailable, localIsConnected=$localIsConnected, videoUrl=${widget.videoUrl}');
     _logger.fine('build: using stream key: $currentStreamKey');
+    _logger.fine(
+        'build: using resolution: ${displayWidth}x$displayHeight, hasDetectedResolution=${RobotState.hasDetectedResolution}');
 
     // Always attempt to show the video feed if the robot is running
     // This is a more permissive approach that will try to connect even if isVideoAvailable is false
     if (!robotRunning) {
-      return Container(
-        width: 320,
-        height: 240,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-            border: Border.all(
-              color: Colors.grey,
-              width: 1.0,
-            ),
-            borderRadius: BorderRadius.zero),
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.videocam_off, size: 48, color: Colors.grey),
-              SizedBox(height: 8),
-              Text('Robot not running', style: TextStyle(color: Colors.grey)),
-            ],
-          ),
-        ),
+      return _buildPlaceholderContainer(
+        icon: Icons.videocam_off,
+        message: 'Robot not running',
       );
     }
 
@@ -430,97 +463,128 @@ class _VideoPlayerWidgetState extends State<VideoPlayerWidget> {
     final String videoUrl = widget.videoUrl.trim();
     if (videoUrl.isEmpty) {
       _logger.warning('Empty video URL');
-      return Container(
-        width: 320,
-        height: 240,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-            border: Border.all(
-              color: Colors.grey,
-              width: 1.0,
-            ),
-            borderRadius: BorderRadius.zero),
-        child: const Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error, size: 48, color: Colors.red),
-              SizedBox(height: 8),
-              Text('Invalid video URL', style: TextStyle(color: Colors.grey)),
-            ],
-          ),
-        ),
+      return _buildPlaceholderContainer(
+        icon: Icons.error,
+        message: 'Invalid video URL',
+        iconColor: AppColors.statusRed,
       );
     }
 
-    // Create a widget that will persist across rebuilds
-    // Use RepaintBoundary to prevent unnecessary repaints
-    return Container(
-      width: 320, // Fixed width
-      height: 240, // Fixed height
-      clipBehavior: Clip.antiAlias, // Ensure clean corners
-      decoration: BoxDecoration(
-          border: Border.all(
-            color: Colors.grey,
-            width: 1.0, // Explicit border width
-          ),
-          borderRadius: BorderRadius.zero),
-      child: Stack(
-        children: [
-          // Use a RepaintBoundary to prevent unnecessary repaints
-          RepaintBoundary(
-            // Use ValueKey instead of UniqueKey to maintain the same key across rebuilds
-            // Only change the key when _streamKey changes (forced reconnection)
-            child: Mjpeg(
-              key: _streamKey,
-              isLive: true,
-              stream: videoUrl,
-              error: (context, error, stack) {
-                _logger.warning('Error loading video: $error');
-                _handleError();
-                return Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error_outline,
-                          size: 48, color: Colors.red),
-                      const SizedBox(height: 8),
-                      Text('Connection error: Retry $_retryCount/$maxRetries'),
-                      const SizedBox(height: 8),
-                      if (_retryCount < maxRetries)
-                        const Text('Attempting to reconnect...'),
-                    ],
-                  ),
-                );
-              },
-              fit: BoxFit.contain,
-              // Add a custom preprocessor to detect frames
-              preprocessor: FrameDetectionPreprocessor(() {
-                _updateFrameTimestamp();
-              }),
+    // Create a widget that will adapt to the video stream size
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return Container(
+          clipBehavior: Clip.antiAlias, // Ensure clean corners
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: AppColors.borderColor,
+              width: 1.0, // Explicit border width
             ),
+            borderRadius: BorderRadius.zero,
           ),
-          // Show stalled indicator if video is stalled
-          if (localIsStalled)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.video_stable, size: 48, color: Colors.orange),
-                    SizedBox(height: 8),
-                    Text('Video feed stalled',
-                        style: TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 8),
-                    Text('Attempting to restart...',
-                        style: TextStyle(color: Colors.white)),
-                  ],
-                ),
+          // Use FittedBox to scale the video to fit the available space
+          // while maintaining aspect ratio
+          child: FittedBox(
+            fit: BoxFit.contain,
+            child: SizedBox(
+              width: displayWidth,
+              height: displayHeight,
+              child: Stack(
+                children: [
+                  // Use a RepaintBoundary to prevent unnecessary repaints
+                  RepaintBoundary(
+                    // Use ValueKey instead of UniqueKey to maintain the same key across rebuilds
+                    // Only change the key when _streamKey changes (forced reconnection)
+                    child: Mjpeg(
+                      key: _streamKey,
+                      isLive: true,
+                      stream: videoUrl,
+                      error: (context, error, stack) {
+                        _logger.warning('Error loading video: $error');
+                        _handleError();
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.error_outline,
+                                  size: 48, color: AppColors.statusRed),
+                              const SizedBox(height: 8),
+                              Text(
+                                  'Connection error: Retry $_retryCount/$maxRetries'),
+                              const SizedBox(height: 8),
+                              if (_retryCount < maxRetries)
+                                const Text('Attempting to reconnect...'),
+                            ],
+                          ),
+                        );
+                      },
+                      fit: BoxFit.contain,
+                      // Add a custom preprocessor to detect frames and resolution
+                      preprocessor: FrameDetectionPreprocessor(
+                        () {
+                          _updateFrameTimestamp();
+                        },
+                        onResolutionDetected: _hasDetectedActualResolution
+                            ? null // Skip resolution detection if we already have it
+                            : _handleResolutionDetected,
+                      ),
+                    ),
+                  ),
+                  // Show stalled indicator if video is stalled
+                  if (localIsStalled)
+                    Container(
+                      color: Colors.black54,
+                      child: Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.video_stable,
+                                size: 48, color: Colors.orange),
+                            const SizedBox(height: 8),
+                            const Text('Video feed stalled',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 8),
+                            const Text('Attempting to restart...',
+                                style: TextStyle(color: Colors.white)),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-        ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper method to build placeholder containers
+  Widget _buildPlaceholderContainer({
+    required IconData icon,
+    required String message,
+    Color iconColor = AppColors.disabledText,
+  }) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: AppColors.borderColor,
+          width: 1.0,
+        ),
+        borderRadius: BorderRadius.zero,
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 48, color: iconColor),
+            const SizedBox(height: 8),
+            Text(message, style: TextStyle(color: AppColors.disabledText)),
+          ],
+        ),
       ),
     );
   }

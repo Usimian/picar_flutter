@@ -39,6 +39,7 @@ dependencies:
   flutter_joystick: ^0.0.4
   video_player: ^2.8.2
   flutter_mjpeg: ^2.0.4
+  image: ^4.5.3
 
 dev_dependencies:
   flutter_test:

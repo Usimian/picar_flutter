@@ -90,6 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _currentTurn = 0.0; // Add turn tracking
   double _currentPan = 0.0; // Add pan tracking
   double _currentTilt = 0.0; // Add tilt tracking
+  bool _videoEnabled = true; // Add state for video checkbox
 
   // Cache payload builders to avoid recreating them
   final _statusPayloadBuilder = MqttClientPayloadBuilder();
@@ -436,6 +437,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _getImage() {
+    _logger.info('Capturing current image from video feed');
+
+    // If video streaming is disabled in the UI, we need to capture a frame
+    // The video feed is always on from the web server
+    if (!_videoEnabled) {
+      _logger.info('Video streaming disabled in UI, capturing current frame');
+      VideoFeedContainer.captureCurrentFrame();
+    }
+  }
+
+  void _toggleVideo(bool value) {
+    _logger.info('Toggling video display in UI: $value');
+    setState(() {
+      _videoEnabled = value;
+    });
+  }
+
   @override
   void dispose() {
     _statusCheckTimer?.cancel();
@@ -753,34 +772,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             border: Border.all(color: AppColors.borderColor),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: robotState.isRunning
-                                ? const VideoFeedContainer()
-                                : Center(
-                                    child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: robotState.isRunning
+                                      ? VideoFeedContainer(
+                                          streaming: _videoEnabled,
+                                        )
+                                      : Center(
+                                          child: Column(
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
+                                            children: [
+                                              Icon(Icons.power_off,
+                                                  size: 48,
+                                                  color:
+                                                      AppColors.disabledText),
+                                              const SizedBox(height: 8),
+                                              Text(
+                                                'Robot is not running',
+                                                style: TextStyle(
+                                                    color:
+                                                        AppColors.disabledText),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Video feed disabled',
+                                                style: TextStyle(
+                                                    color:
+                                                        AppColors.disabledText,
+                                                    fontSize: 12),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.all(8.0),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: robotState.isRunning
+                                          ? _getImage
+                                          : null,
+                                      icon: const Icon(Icons.camera_alt),
+                                      label: const Text('Get image'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor:
+                                            AppColors.joystickStick,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Row(
                                       children: [
-                                        Icon(Icons.power_off,
-                                            size: 48,
-                                            color: AppColors.disabledText),
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          'Robot is not running',
-                                          style: TextStyle(
-                                              color: AppColors.disabledText),
+                                        Checkbox(
+                                          value: _videoEnabled,
+                                          onChanged: robotState.isRunning
+                                              ? (value) =>
+                                                  _toggleVideo(value ?? true)
+                                              : null,
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Video feed disabled',
-                                          style: TextStyle(
-                                              color: AppColors.disabledText,
-                                              fontSize: 12),
-                                        ),
+                                        const Text('Video'),
                                       ],
                                     ),
-                                  ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -831,6 +894,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // New text input and display at the bottom
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                // Text input field
+                TextField(
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(),
+                    labelText: 'Enter prompt',
+                    hintText: 'Ask me to do something...',
+                    suffixIcon: Icon(Icons.send),
+                  ),
+                ),
+
+                // Text display area
+                Container(
+                  margin: const EdgeInsets.only(top: 8.0),
+                  padding: const EdgeInsets.all(12.0),
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8.0),
+                  ),
+                  child: const Text(
+                    'Text will appear here',
+                    style: TextStyle(fontSize: 14.0),
                   ),
                 ),
               ],

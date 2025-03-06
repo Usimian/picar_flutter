@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:logging/logging.dart';
 import '../utils/app_colors.dart';
+import 'dart:typed_data';
 
 class RobotState extends ChangeNotifier {
   // Create a logger instance for this class
@@ -30,6 +31,9 @@ class RobotState extends ChangeNotifier {
   static int _videoHeight = 240; // Default height
   static bool _hasDetectedResolution = false;
 
+  // Add property to store the last received JPEG image
+  static Uint8List? lastReceivedImage;
+
   // Getters and setters for video resolution
   static int get videoWidth => _videoWidth;
   static int get videoHeight => _videoHeight;
@@ -45,6 +49,14 @@ class RobotState extends ChangeNotifier {
       _videoWidth = width;
       _videoHeight = height;
       _hasDetectedResolution = true;
+    }
+  }
+
+  // Method to update the last received image
+  static void updateLastReceivedImage(Uint8List imageData) {
+    if (imageData.isNotEmpty) {
+      lastReceivedImage = imageData;
+      _logger.fine('Updated last received image: ${imageData.length} bytes');
     }
   }
 

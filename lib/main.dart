@@ -10,6 +10,7 @@ import 'dart:convert'; // Import the dart:convert library
 import 'models/robot_state.dart';
 import 'widgets/position_control.dart';
 import 'utils/app_colors.dart';
+import 'services/llava_service.dart'; // Import the LlavaService
 
 // MQTT Topics
 const String kMqttTopicControlRequest = 'picar/control_request';
@@ -92,6 +93,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _currentTilt = 0.0; // Add tilt tracking
   bool _videoEnabled = true; // Add state for video checkbox
 
+  // LLaVA related variables
+  late LlavaService _llavaService;
+  final TextEditingController _promptController = TextEditingController();
+  String _llavaResponse = 'Responses will appear here';
+  bool _isProcessing = false;
+  bool _llavaAvailable = false;
+
   // Cache payload builders to avoid recreating them
   final _statusPayloadBuilder = MqttClientPayloadBuilder();
   final _drivePayloadBuilder = MqttClientPayloadBuilder();
@@ -124,6 +132,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Setup MQTT client
     _setupMqttClient();
+
+    // Initialize LLaVA service
+    _llavaService =
+        LlavaService(baseUrl: 'http://localhost:11434'); // Ollama API endpoint
+    _checkLlavaAvailability();
 
     // Start periodic status check which will also handle connection checks
     _statusCheckTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
@@ -455,6 +468,93 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  // Process the user's prompt with the current image
+  Future<void> _processPromptWithImage() async {
+    final prompt = _promptController.text.trim();
+    if (prompt.isEmpty) {
+      _logger.warning('Prompt is empty');
+      setState(() {
+        _llavaResponse = 'Please enter a prompt first';
+      });
+      return;
+    }
+
+    // Check if we have an image
+    if (RobotState.lastReceivedImage == null) {
+      _logger.warning('No image available');
+      setState(() {
+        _llavaResponse =
+            'No image available. Make sure the video feed is working.';
+      });
+      return;
+    }
+
+    // Check if LLaVA service is available
+    if (!_llavaAvailable) {
+      _logger.warning('LLaVA service is not available');
+      setState(() {
+        _llavaResponse = 'LLaVA service is not available. Check your server.';
+      });
+      await _checkLlavaAvailability();
+      return;
+    }
+
+    // Process the prompt with the image
+    setState(() {
+      _isProcessing = true;
+      _llavaResponse = 'Processing...';
+    });
+
+    try {
+      final response = await _llavaService.processImageAndText(
+        RobotState.lastReceivedImage!,
+        prompt,
+      );
+
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _llavaResponse = response;
+        });
+      }
+    } catch (e) {
+      _logger.severe('Error processing prompt with image: $e');
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _llavaResponse = 'Error: $e';
+        });
+      }
+    }
+  }
+
+  // Check if LLaVA service is available
+  Future<void> _checkLlavaAvailability() async {
+    try {
+      final available = await _llavaService.isAvailable();
+      if (mounted) {
+        setState(() {
+          _llavaAvailable = available;
+          if (available) {
+            _logger.info('LLaVA service is available');
+          } else {
+            _logger.warning('LLaVA service is not available');
+            _llavaResponse =
+                'LLaVA service is not available. Check your server.';
+          }
+        });
+      }
+    } catch (e) {
+      _logger.severe('Error checking LLaVA availability: $e');
+      if (mounted) {
+        setState(() {
+          _llavaAvailable = false;
+          _llavaResponse = 'Error connecting to LLaVA: $e';
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _statusCheckTimer?.cancel();
@@ -462,6 +562,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _driveDebounceTimer?.cancel();
     _cameraDebounceTimer?.cancel();
     _mqttClient.disconnect();
+    _promptController.dispose();
+    _llavaService.dispose();
     super.dispose();
   }
 
@@ -907,12 +1009,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 // Text input field
                 TextField(
+                  controller: _promptController,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(),
-                    labelText: 'Enter prompt',
-                    hintText: 'Ask me to do something...',
-                    suffixIcon: Icon(Icons.send),
+                    labelText: 'Enter prompt for LLaVA',
+                    hintText: 'Ask about what you see in the image...',
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                          _isProcessing ? Icons.hourglass_top : Icons.send),
+                      onPressed: _isProcessing ? null : _processPromptWithImage,
+                    ),
                   ),
+                  enabled: !_isProcessing && _llavaAvailable,
+                  onSubmitted: (_) => _processPromptWithImage(),
                 ),
 
                 // Text display area
@@ -920,13 +1029,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   margin: const EdgeInsets.only(top: 8.0),
                   padding: const EdgeInsets.all(12.0),
                   width: double.infinity,
+                  height: 150, // Fixed height for response area
                   decoration: BoxDecoration(
                     color: Colors.grey[200],
                     borderRadius: BorderRadius.circular(8.0),
+                    border: Border.all(color: Colors.grey[400]!),
                   ),
-                  child: const Text(
-                    'Text will appear here',
-                    style: TextStyle(fontSize: 14.0),
+                  child: SingleChildScrollView(
+                    child: Text(
+                      _llavaResponse,
+                      style: TextStyle(fontSize: 14.0),
+                    ),
+                  ),
+                ),
+
+                // Status indicator
+                Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _llavaAvailable ? Icons.check_circle : Icons.error,
+                        color: _llavaAvailable ? Colors.green : Colors.red,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _llavaAvailable
+                            ? 'LLaVA service connected'
+                            : 'LLaVA service unavailable',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _llavaAvailable ? Colors.green : Colors.red,
+                        ),
+                      ),
+                      const Spacer(),
+                      if (_isProcessing)
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                    ],
                   ),
                 ),
               ],

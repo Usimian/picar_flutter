@@ -135,7 +135,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     // Initialize LLaVA service
     _llavaService =
-        LlavaService(baseUrl: 'http://localhost:11434'); // Ollama API endpoint
+        // LlavaService(baseUrl: 'http://localhost:11434'); // Ollama API endpoint
+        LlavaService(baseUrl: 'http://192.168.1.162:11434'); // Ollama API endpoint
     _checkLlavaAvailability();
 
     // Start periodic status check which will also handle connection checks

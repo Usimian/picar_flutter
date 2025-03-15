@@ -1,0 +1,2 @@
+/home/mw/picar_flutter/android/app/.cxx/Debug/295e1f26/x86_64/CMakeFiles/edit_cache.dir
+/home/mw/picar_flutter/android/app/.cxx/Debug/295e1f26/x86_64/CMakeFiles/rebuild_cache.dir

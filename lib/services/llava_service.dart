@@ -86,6 +86,46 @@ class LlavaService {
     }
   }
 
+  /// Process a text-only prompt with the LLM
+  /// Returns the model's response as a String
+  Future<String> processTextOnly(String prompt) async {
+    _logger.info('Processing text-only prompt: "$prompt"');
+
+    try {
+      _logger.info('Sending text-only request to Ollama at $baseUrl');
+
+      // Using Ollama API format for text-only queries
+      final response = await _client.post(
+        Uri.parse('$baseUrl/api/generate'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'model': 'llava', // Using the same model, but without images
+          'prompt': prompt,
+          'stream': false,
+          'options': {
+            'temperature': 0.7,
+            'num_predict': 1024,
+          },
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final result = data['response'] as String;
+        _logger.info('Received text-only response from Ollama (${result.length} chars)');
+        return result;
+      } else {
+        final error =
+            'Failed to process text-only query: ${response.statusCode} - ${response.body}';
+        _logger.warning(error);
+        throw Exception(error);
+      }
+    } catch (e) {
+      _logger.severe('Error communicating with Ollama for text-only query: $e');
+      return 'Error: $e';
+    }
+  }
+
   /// Check if the LLaVA service is available
   Future<bool> isAvailable() async {
     try {

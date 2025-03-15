@@ -115,6 +115,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double? _lastSentPan;
   double? _lastSentTilt;
 
+  double _llavaResponseHeight = 150.0; // Default height for the response area
+
   @override
   void initState() {
     super.initState();
@@ -480,16 +482,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    // Check if we have an image
-    if (RobotState.lastReceivedImage == null) {
-      _logger.warning('No image available');
-      setState(() {
-        _llavaResponse =
-            'No image available. Make sure the video feed is working.';
-      });
-      return;
-    }
-
     // Check if LLaVA service is available
     if (!_llavaAvailable) {
       _logger.warning('LLaVA service is not available');
@@ -500,17 +492,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    // Process the prompt with the image
+    // Process the prompt
     setState(() {
       _isProcessing = true;
       _llavaResponse = 'Processing...';
     });
 
     try {
-      final response = await _llavaService.processImageAndText(
-        RobotState.lastReceivedImage!,
-        prompt,
-      );
+      String response;
+      
+      // Check if we have an image
+      if (RobotState.lastReceivedImage == null) {
+        _logger.info('No image available, using text-only mode');
+        response = await _llavaService.processTextOnly(prompt);
+      } else {
+        _logger.info('Image available, using image+text mode');
+        response = await _llavaService.processImageAndText(
+          RobotState.lastReceivedImage!,
+          prompt,
+        );
+      }
 
       if (mounted) {
         setState(() {
@@ -519,7 +520,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     } catch (e) {
-      _logger.severe('Error processing prompt with image: $e');
+      _logger.severe('Error processing prompt: $e');
       if (mounted) {
         setState(() {
           _isProcessing = false;
@@ -787,80 +788,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 Expanded(
                   child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Speed: ${_currentSpeed.toStringAsFixed(2)}\nTurn: ${_currentTurn.toStringAsFixed(2)}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: 200,
-                          height: 200,
-                          child: Consumer<RobotState>(
-                            builder: (context, robotState, child) {
-                              return Joystick(
-                                mode: JoystickMode.all,
-                                listener: (details) {
-                                  // Calculate desired speed (negative Y for forward)
-                                  double desiredSpeed = -details.y;
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Speed: ${_currentSpeed.toStringAsFixed(2)}\nTurn: ${_currentTurn.toStringAsFixed(2)}',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: 200,
+                            height: 220,
+                            child: Consumer<RobotState>(
+                              builder: (context, robotState, child) {
+                                return Joystick(
+                                  mode: JoystickMode.all,
+                                  listener: (details) {
+                                    // Calculate desired speed (negative Y for forward)
+                                    double desiredSpeed = -details.y;
 
-                                  setState(() {
-                                    _currentSpeed = desiredSpeed;
-                                    _currentTurn = details.x;
-                                  });
+                                    setState(() {
+                                      _currentSpeed = desiredSpeed;
+                                      _currentTurn = details.x;
+                                    });
 
-                                  _publishDriveControl(desiredSpeed, details.x);
-                                },
-                                base: Container(
-                                  width: 150,
-                                  height: 150,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: robotState.distance < 10
-                                        ? AppColors
-                                            .distanceBackground // Light red background when too close
-                                        : AppColors.joystickBase,
-                                  ),
-                                  child: Center(
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Text(
-                                          'DRIVE',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                    _publishDriveControl(desiredSpeed, details.x);
+                                  },
+                                  base: Container(
+                                    width: 150,
+                                    height: 150,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppColors.joystickBase,
+                                    ),
+                                    child: const Center(
+                                      child: Text(
+                                        'DRIVE',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
                                         ),
-                                        if (robotState.distance < 10)
-                                          Text(
-                                            'TOO CLOSE!',
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              color: AppColors.distanceWarning,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
-                                stick: Container(
-                                  width: 50,
-                                  height: 50,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: AppColors.joystickStick,
+                                  stick: Container(
+                                    width: 50,
+                                    height: 50,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: AppColors.joystickStick,
+                                    ),
                                   ),
-                                ),
-                              );
-                            },
+                                );
+                              },
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -881,8 +867,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(8),
                                   child: robotState.isRunning
-                                      ? VideoFeedContainer(
-                                          streaming: _videoEnabled,
+                                      ? Stack(
+                                          children: [
+                                            VideoFeedContainer(
+                                              streaming: _videoEnabled,
+                                            ),
+                                            // Distance indicator overlay
+                                            Positioned(
+                                              top: 16,
+                                              right: 16,
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(
+                                                  horizontal: 12,
+                                                  vertical: 8,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: robotState.distance < 10
+                                                      ? Colors.red.withAlpha(204)
+                                                      : Colors.black.withAlpha(153),
+                                                  borderRadius: BorderRadius.circular(16),
+                                                ),
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.straighten,
+                                                      color: Colors.white,
+                                                      size: 20,
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    Text(
+                                                      'Distance: ${robotState.distance == -2 ? '∞' : robotState.distance.toStringAsFixed(1)} cm',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.bold,
+                                                        fontSize: 16,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         )
                                       : Center(
                                           child: Column(
@@ -955,47 +981,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 Expanded(
                   child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Pan: ${(_currentPan * 90).toStringAsFixed(2)}°\nTilt: ${(_currentTilt * 90).toStringAsFixed(2)}°',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 16),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: 200,
-                          height: 200,
-                          child: Joystick(
-                            mode: JoystickMode.all,
-                            listener: (details) {
-                              setState(() {
-                                _currentPan = details.x;
-                                _currentTilt = details.y;
-                              });
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Pan: ${(_currentPan * 90).toStringAsFixed(2)}°\nTilt: ${(_currentTilt * 90).toStringAsFixed(2)}°',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(fontSize: 16),
+                          ),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: 200,
+                            height: 200,
+                            child: Joystick(
+                              mode: JoystickMode.all,
+                              listener: (details) {
+                                setState(() {
+                                  _currentPan = details.x;
+                                  _currentTilt = details.y;
+                                });
 
-                              _publishCameraControl(details.x, details.y);
-                            },
-                            base: Container(
-                              width: 150,
-                              height: 150,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: AppColors.joystickBase,
+                                _publishCameraControl(details.x, details.y);
+                              },
+                              base: Container(
+                                width: 150,
+                                height: 150,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: AppColors.joystickBase,
+                                ),
                               ),
-                            ),
-                            stick: Container(
-                              width: 50,
-                              height: 50,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: AppColors.joystickStick,
+                              stick: Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: AppColors.joystickStick,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -1020,28 +1048,95 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           _isProcessing ? Icons.hourglass_top : Icons.send),
                       onPressed: _isProcessing ? null : _processPromptWithImage,
                     ),
+                    helperText: RobotState.lastReceivedImage == null 
+                        ? 'No image available - will use text-only mode'
+                        : 'Image available - will use image+text mode',
+                    helperStyle: TextStyle(
+                      color: RobotState.lastReceivedImage == null 
+                          ? Colors.orange 
+                          : Colors.green,
+                      fontSize: 12,
+                    ),
                   ),
                   enabled: !_isProcessing && _llavaAvailable,
                   onSubmitted: (_) => _processPromptWithImage(),
                 ),
 
-                // Text display area
-                Container(
-                  margin: const EdgeInsets.only(top: 8.0),
-                  padding: const EdgeInsets.all(12.0),
-                  width: double.infinity,
-                  height: 150, // Fixed height for response area
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8.0),
-                    border: Border.all(color: Colors.grey[400]!),
-                  ),
-                  child: SingleChildScrollView(
-                    child: Text(
-                      _llavaResponse,
-                      style: TextStyle(fontSize: 14.0),
+                // Text display area with resizing capability
+                Column(
+                  children: [
+                    Container(
+                      margin: const EdgeInsets.only(top: 8.0),
+                      padding: const EdgeInsets.all(12.0),
+                      width: double.infinity,
+                      height: _llavaResponseHeight,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(8.0),
+                          topRight: Radius.circular(8.0),
+                          bottomLeft: Radius.circular(_llavaResponseHeight <= 50 ? 8.0 : 0),
+                          bottomRight: Radius.circular(_llavaResponseHeight <= 50 ? 8.0 : 0),
+                        ),
+                        border: Border.all(color: Colors.grey[400]!),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          _llavaResponse,
+                          style: TextStyle(fontSize: 14.0),
+                        ),
+                      ),
                     ),
-                  ),
+                    // Resize handle
+                    if (_llavaResponseHeight > 50)
+                      Tooltip(
+                        message: 'Drag to resize • Double-tap to reset',
+                        preferBelow: true,
+                        child: GestureDetector(
+                          onVerticalDragUpdate: (details) {
+                            setState(() {
+                              _llavaResponseHeight += details.delta.dy;
+                              // Ensure minimum height
+                              if (_llavaResponseHeight < 50) {
+                                _llavaResponseHeight = 50;
+                              }
+                              // Ensure maximum height (adjust as needed)
+                              if (_llavaResponseHeight > 500) {
+                                _llavaResponseHeight = 500;
+                              }
+                            });
+                          },
+                          onDoubleTap: () {
+                            setState(() {
+                              _llavaResponseHeight = 150.0; // Reset to default height
+                            });
+                          },
+                          child: Container(
+                            height: 10,
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[300],
+                              borderRadius: BorderRadius.only(
+                                bottomLeft: Radius.circular(8.0),
+                                bottomRight: Radius.circular(8.0),
+                              ),
+                              border: Border(
+                                left: BorderSide(color: Colors.grey[400]!),
+                                right: BorderSide(color: Colors.grey[400]!),
+                                bottom: BorderSide(color: Colors.grey[400]!),
+                              ),
+                            ),
+                            child: Center(
+                              child: Container(
+                                width: 30,
+                                height: 3,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
 
                 // Status indicator
@@ -1055,16 +1150,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         size: 16,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        _llavaAvailable
-                            ? 'LLaVA service connected'
-                            : 'LLaVA service unavailable',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: _llavaAvailable ? Colors.green : Colors.red,
+                      Expanded(
+                        child: Text(
+                          _llavaAvailable
+                              ? 'LLaVA service connected (${_llavaService.baseUrl})'
+                              : 'LLaVA service unavailable (${_llavaService.baseUrl})',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: _llavaAvailable ? Colors.green : Colors.red,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const Spacer(),
                       if (_isProcessing)
                         const SizedBox(
                           width: 16,

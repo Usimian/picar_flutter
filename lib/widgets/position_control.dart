@@ -6,7 +6,6 @@ import 'dart:convert';
 import 'package:logging/logging.dart';
 import '../main.dart' show kMqttTopicControlRequest;
 import 'dart:async';
-import '../utils/app_colors.dart';
 
 class PositionControl extends StatefulWidget {
   final MqttClient mqttClient;
@@ -70,18 +69,6 @@ class _PositionControlState extends State<PositionControl> {
           'Current: ${robotState.pos.round()} mm',
         );
 
-        final distanceText = Text(
-          'Distance: ${robotState.distance == -2 ? '∞' : robotState.distance.toStringAsFixed(1)} cm',
-          style: TextStyle(
-            color: robotState.distance == -2
-                ? AppColors.distanceWarning
-                : (robotState.distance < 10
-                    ? AppColors.distanceWarning
-                    : AppColors.distanceNormal),
-            fontWeight: FontWeight.bold,
-          ),
-        );
-
         final slider = Slider(
           min: -500,
           max: 500,
@@ -124,13 +111,6 @@ class _PositionControlState extends State<PositionControl> {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: currentText,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: distanceText,
               ),
             ),
           ],

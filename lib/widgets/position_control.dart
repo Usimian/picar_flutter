@@ -4,7 +4,7 @@ import '../models/robot_state.dart';
 import 'package:mqtt_client/mqtt_client.dart';
 import 'dart:convert';
 import 'package:logging/logging.dart';
-import '../main.dart' show kMqttTopicControlRequest;
+import '../config/mqtt_config.dart';
 import 'dart:async';
 
 class PositionControl extends StatefulWidget {
@@ -39,7 +39,7 @@ class _PositionControlState extends State<PositionControl> {
 
     _payloadBuilder.addString(jsonEncode(message));
     widget.mqttClient.publishMessage(
-        kMqttTopicControlRequest, MqttQos.atMostOnce, _payloadBuilder.payload!);
+        MqttConfig.topicControlRequest, MqttQos.atMostOnce, _payloadBuilder.payload!);
 
     _logger.fine('Published position update: $position');
   }
